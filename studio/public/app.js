@@ -300,7 +300,7 @@ function matchesFilters(r) {
   return true;
 }
 
-function filterRow(label, key, options) {
+function filterRow(label, key, options, labelFor = (value) => value) {
   if (!options.length) return null;
   return el('div', { style: { marginBottom: '12px' } },
     el('h3', { style: { marginBottom: '7px' } }, label),
@@ -310,7 +310,7 @@ function filterRow(label, key, options) {
           class: 'chip',
           'aria-pressed': String(state.filters[key] === value),
           onclick: () => { state.filters[key] = state.filters[key] === value ? '' : value; render(); },
-        }, value, el('span', { class: 'n' }, count)))));
+        }, labelFor(value), el('span', { class: 'n' }, count)))));
 }
 
 function viewRecipes() {
@@ -348,7 +348,7 @@ function viewRecipes() {
       el('div', { class: 'body' },
         filterRow('Status', 'status', (state.boot?.statuses || []).map((s) => ({
           value: s, count: state.boot.counts.byStatus[s] || 0,
-        })).filter((s) => s.count)),
+        })).filter((s) => s.count), (value) => STATUS_LABEL[value] || value),
         filterRow('Kind of food', 'foodType', facets.foodTypes),
         filterRow('Cuisine', 'cuisine', facets.cuisines),
         filterRow('Where it came from', 'author', facets.authors),
