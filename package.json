@@ -1,0 +1,23 @@
+{
+  "name": "emma-cooking-blog",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Recipe library, photo studio, and static blog for Emma's cooking blog.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "studio": "node studio/server.js",
+    "build": "node site/build.js",
+    "preview": "node site/preview.js",
+    "doctor": "node scripts/doctor.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "busboy": "^1.6.0",
+    "gray-matter": "^4.0.3",
+    "heic-convert": "^2.1.0",
+    "markdown-it": "^14.1.0",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.33.5"
+  }
+}

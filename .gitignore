@@ -1,0 +1,16 @@
+# Secrets — never commit the API key
+.env
+
+# Installed packages and build output
+node_modules/
+dist/
+
+# Working files the Studio creates
+library/.cache/
+library/.trash/
+library/inbox/.discarded/
+
+# Operating system clutter
+.DS_Store
+Thumbs.db
+desktop.ini
