@@ -1,7 +1,11 @@
 # Your recipe studio
 
-Everything lives in one app. Double-click **Recipe Studio** on the desktop and
-it opens in your browser. Close the black window when you're done.
+Everything lives in one app. Double-click the **Recipe Studio** icon on the
+desktop — the steaming bowl — and it opens in your browser on its own.
+
+A small black window opens alongside it. Leave it be while you work; it shows
+the address to type into a phone if you ever need it. **Closing that window is
+how you stop the Studio.**
 
 The app has four screens, listed down the left side.
 

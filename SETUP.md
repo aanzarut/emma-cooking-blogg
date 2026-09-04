@@ -66,14 +66,27 @@ npm run doctor
 Every line should have a tick, except "Recipe reading configured" if you
 skipped step 3.
 
-## 5. Make it one click for her
+## 5. Put the icon on her desktop
 
-Right-click `start-studio.bat` → **Send to** → **Desktop (create shortcut)**.
-Rename the shortcut to *Recipe Studio*. Double-clicking it starts the Studio
-and opens the browser. It also runs `npm install` by itself if the packages
-are ever missing.
+In the project folder, double-click **`Install desktop icon.bat`**.
 
-To stop the Studio, close the black window it opens.
+That creates a *Recipe Studio* shortcut on the desktop with its own icon — a
+steaming bowl, so it doesn't look like a script. It finds the desktop even if
+OneDrive has moved it. Run it once; run it again any time the project folder
+moves.
+
+Double-clicking the icon starts the Studio and opens the browser by itself,
+on whatever port is configured. It also runs `npm install` on its own if the
+packages are ever missing. A small black window stays open showing the
+address to use from a phone — **closing that window stops the Studio.**
+
+If PowerShell is blocked by policy on this PC, make the shortcut by hand
+instead: right-click `start-studio.bat` → **Send to** → **Desktop (create
+shortcut)**, then right-click the new shortcut → **Properties** → **Change
+Icon** → browse to `assets\recipe-studio.ico`.
+
+To change the icon later, edit `assets/icon.svg`, run `npm run icon`, and
+double-click `Install desktop icon.bat` again.
 
 ## 6. Let the phones reach it
 
@@ -93,6 +106,7 @@ network (not one on wifi and one on cellular), and that the wifi isn't a
 | `npm run build` | Build the website into `dist/` |
 | `npm run preview` | Serve the built website on its own at <http://localhost:4322> |
 | `npm run doctor` | Check the installation |
+| `npm run icon` | Rebuild the desktop icon from `assets/icon.svg` |
 
 ## Changing the dropdown lists
 

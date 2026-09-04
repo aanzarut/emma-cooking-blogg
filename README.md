@@ -8,7 +8,7 @@ Three parts, one folder:
 | Part | What it is | How it runs |
 |---|---|---|
 | **The library** | `library/` — one folder per recipe, holding the text, the photos, and the picture of the original card. Plain files, readable forever. | It's just files |
-| **Recipe Studio** | A private app for adding, reading, tagging and touching up recipes. Runs on the computer, in a web browser. | `npm run studio` |
+| **Recipe Studio** | A private app for adding, reading, tagging and touching up recipes. Runs on the computer, in a web browser. | the desktop icon, or `npm run studio` |
 | **The website** | The public blog, built from the library. Fast, searchable, no database. | `npm run build` |
 
 ## Which document do I want?
@@ -54,6 +54,7 @@ config/
   taxonomy.json              the dropdown lists: food types, cuisines, units, tags
   about.md                   the About page
 
+assets/                      the desktop icon (icon.svg is the source)
 studio/                      the private app (server + browser interface)
 site/                        the website builder and its stylesheet
 dist/                        the finished website — generated, never edited by hand

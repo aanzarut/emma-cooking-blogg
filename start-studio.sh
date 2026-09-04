@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Opens Recipe Studio. Run with:  ./start-studio.sh
+# Starts Recipe Studio. Press Ctrl+C to stop it.
 set -e
 cd "$(dirname "$0")"
 
@@ -13,5 +13,4 @@ if [ ! -d node_modules ]; then
   npm install
 fi
 
-(sleep 2 && (open http://localhost:4321 2>/dev/null || xdg-open http://localhost:4321 2>/dev/null || true)) &
-exec node studio/server.js
+exec node studio/server.js --open

@@ -4,12 +4,15 @@
   "private": true,
   "description": "Recipe library, photo studio, and static blog for Emma's cooking blog.",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "studio": "node studio/server.js",
     "build": "node site/build.js",
     "preview": "node site/preview.js",
-    "doctor": "node scripts/doctor.js"
+    "doctor": "node scripts/doctor.js",
+    "icon": "node scripts/make-icon.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

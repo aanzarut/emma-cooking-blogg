@@ -428,6 +428,19 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+/** Open the Studio in the default browser, once it is actually answering. */
+function openInBrowser(url) {
+  const [command, args] =
+    process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', url]] :
+    process.platform === 'darwin' ? ['open', [url]] :
+    ['xdg-open', [url]];
+  const child = spawn(command, args, { detached: true, stdio: 'ignore' });
+  child.on('error', () => {
+    console.log(`  Could not open the browser automatically. Go to ${url}`);
+  });
+  child.unref();
+}
+
 server.listen(PORT, '0.0.0.0', () => {
   const lan = lanAddress();
   console.log('');
@@ -443,6 +456,11 @@ server.listen(PORT, '0.0.0.0', () => {
     ? `    Recipe reading:    on (${ai.DEFAULT_MODEL})`
     : '    Recipe reading:    off (no ANTHROPIC_API_KEY in .env)');
   console.log('');
-  console.log('  Press Ctrl+C to stop.');
+  const launchedFromIcon = process.argv.includes('--open') || process.env.OPEN_BROWSER === '1';
+  console.log(launchedFromIcon
+    ? '  Leave this window open while you work. Close it when you are finished.'
+    : '  Press Ctrl+C to stop.');
   console.log('');
+
+  if (launchedFromIcon) openInBrowser(`http://localhost:${PORT}`);
 });
