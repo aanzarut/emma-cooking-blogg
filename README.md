@@ -13,7 +13,7 @@ Three parts, one folder:
 
 ## Which document do I want?
 
-- **[SETUP.md](SETUP.md)** — installing this on a Windows PC. One-time, needs a terminal.
+- **[SETUP.md](SETUP.md)** — installing this on a Windows PC. Install Node.js, unzip the download, double-click *Set up on this PC*.
 - **[GUIDE.md](GUIDE.md)** — the day-to-day guide for Emma. No terminal, no jargon.
 - **[PUBLISHING.md](PUBLISHING.md)** — putting the site on the internet when she's ready.
 

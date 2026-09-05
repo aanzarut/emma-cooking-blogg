@@ -18,29 +18,43 @@ You should see `v20.something` or higher.
 
 ## 2. Get the project onto the PC
 
-If Git is installed:
+1. Download the ZIP:
+   <https://github.com/aanzarut/emma-cooking-blogg/archive/refs/heads/claude/cooking-blog-asset-system-a4jxrn.zip>
+2. In Downloads, right-click it → **Properties** → tick **Unblock** if it is
+   offered → **OK**. Then right-click → **Extract All** → **Extract**.
+3. Open the extracted folder (keep going in until you see a lot of files) and
+   double-click **`Set up on this PC`**. Windows may show a blue "protected your
+   PC" box: **More info** → **Run anyway**.
+
+That one double-click:
+
+- puts Recipe Studio at `Documents\emma-cooking-blogg` — a short path, which
+  matters (see below);
+- looks in Documents, Downloads and the Desktop for an earlier copy, and if it
+  finds one, copies its recipes, photos, key and settings across and checks
+  every file arrived;
+- installs what it needs (a couple of minutes the first time);
+- makes the desktop icon;
+- runs the installation check.
+
+Nothing is ever deleted. It names the folder it copied from so you can remove
+it yourself once the Studio starts from the icon; the unzipped download can
+go too. Running it again later simply updates the copy in Documents.
+
+If Git is installed and you would rather work that way:
 
 ```
-git clone https://github.com/aanzarut/emma-cooking-blogg.git
-cd emma-cooking-blogg
+git clone https://github.com/aanzarut/emma-cooking-blogg.git  Documents\emma-cooking-blogg
+cd Documents\emma-cooking-blogg
 npm install
 ```
 
-If Git isn't installed, download the repository as a ZIP from GitHub, unzip it,
-open Command Prompt in that folder, and run `npm install`.
-
-**Keep the folder path short — this matters.** Put it at
-`C:\Users\<name>\Documents\emma-cooking-blogg` and rename the folder to
-exactly that if the download gave it a longer name. Windows refuses to write
-any file whose full path exceeds 260 characters. A ZIP downloaded from a branch
-carries a ~57-character folder name, and Explorer's *Extract All* nests it
-inside another folder of the same name — enough on its own to push the Studio's
-internal files past the limit. When that happens, **photo previews in the Inbox
-fail** with nothing on screen to say why. `npm run doctor` measures this and
-warns before it bites.
-
-`npm install` takes a couple of minutes the first time — it fetches the photo
-processing library, which includes compiled Windows binaries.
+**Why the short path matters.** Windows refuses to write any file whose full
+path exceeds 260 characters. A ZIP downloaded from a branch carries a
+~57-character folder name, and Explorer's *Extract All* nests it inside another
+folder of the same name — enough to push a recipe photo's path past the limit,
+at which point saving it silently fails. `Set up on this PC` avoids this by
+installing to a short path; `Check for problems` measures it.
 
 ## 3. Switch on recipe reading
 
@@ -79,7 +93,8 @@ skipped step 3.
 
 ## 5. Put the icon on her desktop
 
-In the project folder, double-click **`Install desktop icon.bat`**.
+`Set up on this PC` already did this. If the icon ever goes missing or the
+folder is moved, double-click **`Install desktop icon.bat`** to make it again.
 
 That creates a *Recipe Studio* shortcut on the desktop with its own icon — a
 steaming bowl, so it doesn't look like a script. It finds the desktop even if
@@ -116,6 +131,7 @@ launchers appear without their `.bat`:
 
 | What you see | What it really is |
 |---|---|
+| **Set up on this PC** | `Set up on this PC.bat` |
 | **Update** | `Update.bat` |
 | **Check for problems** | `Check for problems.bat` |
 | **Install desktop icon** | `Install desktop icon.bat` |

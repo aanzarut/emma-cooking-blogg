@@ -68,19 +68,74 @@ function copyTree(from, to) {
   fs.cpSync(from, to, { recursive: true, force: true, preserveTimestamps: true });
 }
 
-/** Where Windows thinks Documents is — which OneDrive often moves. */
-function documentsDir() {
-  if (process.env.RECIPE_STUDIO_DOCUMENTS) return process.env.RECIPE_STUDIO_DOCUMENTS;
+/** Where Windows thinks a special folder is — OneDrive often moves them. */
+function knownFolder(name, fallback) {
   if (process.platform === 'win32') {
     const asked = spawnSync('powershell', [
       '-NoProfile', '-ExecutionPolicy', 'Bypass',
-      '-Command', "[Environment]::GetFolderPath('MyDocuments')",
+      '-Command', `[Environment]::GetFolderPath('${name}')`,
     ], { encoding: 'utf8' });
     const resolved = (asked.stdout || '').trim();
     if (resolved && fs.existsSync(resolved)) return resolved;
-    return path.join(os.homedir(), 'Documents');
   }
+  return fallback;
+}
+
+function documentsDir() {
+  if (process.env.RECIPE_STUDIO_DOCUMENTS) return process.env.RECIPE_STUDIO_DOCUMENTS;
+  if (process.platform === 'win32') return knownFolder('MyDocuments', path.join(os.homedir(), 'Documents'));
   return os.homedir();
+}
+
+/** Places a downloaded-and-unzipped copy, or an older install, tends to be. */
+function likelyPlaces() {
+  if (process.env.RECIPE_STUDIO_SEARCH_DIRS) {
+    return process.env.RECIPE_STUDIO_SEARCH_DIRS.split(path.delimiter).filter(Boolean);
+  }
+  const home = os.homedir();
+  return [
+    documentsDir(),
+    knownFolder('UserProfile', home) && path.join(home, 'Downloads'),
+    knownFolder('Desktop', path.join(home, 'Desktop')),
+    home,
+  ].filter(Boolean);
+}
+
+/**
+ * Find every Recipe Studio install with a library in it, a few levels deep
+ * under the usual folders. Used by first-time setup to find the photos and
+ * recipes already on the machine.
+ */
+function findInstalls(exclude = []) {
+  const skip = new Set(exclude.map((p) => path.resolve(p)));
+  const found = new Map();
+  const walk = (dir, depth) => {
+    if (depth > 3) return;
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    if (isProject(dir) && fs.existsSync(path.join(dir, 'library'))) {
+      const key = path.resolve(dir);
+      if (!skip.has(key)) found.set(key, libraryFileCount(dir));
+      return;                                  // do not descend into an install
+    }
+    for (const e of entries) {
+      if (!e.isDirectory() || SACRED.has(e.name) || e.name.startsWith('.')) continue;
+      walk(path.join(dir, e.name), depth + 1);
+    }
+  };
+  for (const place of likelyPlaces()) walk(place, 0);
+  return [...found.entries()]
+    .map(([dir, files]) => ({ dir, files }))
+    .sort((a, b) => b.files - a.files);
+}
+
+/** How much of a person's own work an install holds. */
+function libraryFileCount(dir) {
+  let n = 0;
+  for (const sub of ['recipes', 'inbox']) {
+    n += treeStats(path.join(dir, 'library', sub)).filter(([rel]) => !rel.endsWith('.gitkeep')).length;
+  }
+  return n;
 }
 
 /** Uncommitted work in a git checkout, or '' when there is none to worry about. */
@@ -233,6 +288,33 @@ function mergeConfig(fresh, target, notes) {
   }
 }
 
+/**
+ * Lay down a fresh copy at `target` from `source`, carry a person's data
+ * across from `dataFrom` (if any), and keep their config. Shared by the
+ * too-deep relocation and first-time setup, which are the same operation.
+ */
+function installFresh(source, target, dataFrom, notes) {
+  if (path.resolve(source) !== path.resolve(target)) {
+    fs.rmSync(target, { recursive: true, force: true });
+    fs.mkdirSync(target, { recursive: true });
+    for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+      if (['node_modules', 'dist', '.git', STATE_FILE].includes(entry.name)) continue;
+      const from = path.join(source, entry.name);
+      const to = path.join(target, entry.name);
+      if (entry.isDirectory()) copyTree(from, to); else fs.copyFileSync(from, to);
+    }
+  }
+  let carried = null;
+  if (dataFrom && path.resolve(dataFrom) !== path.resolve(target)) {
+    carried = carryUserDataAcross(dataFrom, target);
+    // the library's own README is not the person's data; keep the newest one
+    const readme = path.join(source, 'library', 'README.md');
+    if (fs.existsSync(readme)) fs.copyFileSync(readme, path.join(target, 'library', 'README.md'));
+    mergeConfig(source, target, notes);
+  }
+  return carried;
+}
+
 /** Copy recipes, photos and settings into a fresh install, then prove it. */
 function carryUserDataAcross(oldRoot, newRoot) {
   for (const name of ['library', '.env']) {
@@ -242,6 +324,19 @@ function carryUserDataAcross(oldRoot, newRoot) {
     fs.rmSync(to, { recursive: true, force: true });
     if (fs.statSync(from).isDirectory()) copyTree(from, to);
     else fs.copyFileSync(from, to);
+  }
+
+  // The person's own settings win over the shipped defaults. mergeConfig(),
+  // run afterwards by the caller, then offers any changed upstream file as
+  // .new beside them — the same outcome as an in-place update.
+  const oldConfig = path.join(oldRoot, 'config');
+  if (fs.existsSync(oldConfig)) {
+    fs.mkdirSync(path.join(newRoot, 'config'), { recursive: true });
+    for (const entry of fs.readdirSync(oldConfig, { withFileTypes: true })) {
+      if (entry.isFile() && !entry.name.endsWith('.new')) {
+        fs.copyFileSync(path.join(oldConfig, entry.name), path.join(newRoot, 'config', entry.name));
+      }
+    }
   }
 
   const before = treeStats(path.join(oldRoot, 'library'));
@@ -281,6 +376,8 @@ async function main() {
   }
 
   const source = updateSource(projectRoot);
+  if (process.argv.includes('--setup')) return firstTimeSetup(projectRoot, source);
+
   const statePath = path.join(projectRoot, STATE_FILE);
   const state = readJson(statePath, {});
 
@@ -322,11 +419,8 @@ async function main() {
       while (fs.existsSync(target) && !isProject(target)) target = path.join(documentsDir(), `emma-cooking-blogg-${n++}`);
       detail(`Setting up a fresh copy at ${target}`);
 
-      fs.rmSync(target, { recursive: true, force: true });
-      copyTree(fresh, target);
-      const carried = carryUserDataAcross(projectRoot, target);
+      const carried = installFresh(fresh, target, projectRoot, notes);
       detail(`Copied ${carried.files} files (${(carried.bytes / 1048576).toFixed(1)} MB) of recipes and photos, and checked every one arrived.`);
-      mergeConfig(fresh, target, notes);
       movedFrom = projectRoot;
     } else {
       step('Installing the new version...');
@@ -334,57 +428,115 @@ async function main() {
       detail('Program files replaced. Recipes, photos and settings untouched.');
     }
 
-    step('Installing the parts it needs (this can take a minute)...');
-    const installed = process.env.RECIPE_STUDIO_SKIP_INSTALL
-      ? { status: 0 }                                    // used by the test suite
-      : spawnSync('npm', ['install', '--no-audit', '--no-fund'], {
-          cwd: target, stdio: 'inherit', shell: true,
-        });
-    if (installed.status !== 0) {
-      problem('npm install did not finish cleanly. The files are in place — try starting the Studio, and run "Check for problems" if it misbehaves.');
-    }
-
-    if (process.platform === 'win32') {
-      step('Pointing the desktop icon at the current folder...');
-      spawnSync('powershell', [
-        '-NoProfile', '-ExecutionPolicy', 'Bypass',
-        '-File', path.join(target, 'scripts', 'install-shortcut.ps1'),
-      ], { cwd: target, stdio: 'inherit' });
-    }
-
-    fs.writeFileSync(
-      path.join(target, STATE_FILE),
-      JSON.stringify({ etag: release.etag, updatedAt: new Date().toISOString(), branch: source.branch }, null, 2)
-    );
-
-    let health = { status: 0 };
-    if (!process.env.RECIPE_STUDIO_SKIP_INSTALL) {
-      step('Checking everything works...');
-      health = spawnSync(process.execPath, [path.join(target, 'scripts', 'doctor.js')],
-        { cwd: target, stdio: 'inherit' });
-    }
-
-    say();
-    if (health.status === 0) {
-      say('  Done. Start the Studio from the desktop icon as usual.');
-    } else {
-      // Never claim success over the top of a failed check.
-      say('  The new version is installed, but the check above found something');
-      say('  that still needs attention. Read the line marked with an X and do');
-      say('  what it says, then double-click "Check for problems" again.');
-    }
-    for (const note of notes) detail(note);
-    if (movedFrom) {
-      say();
-      say(`  Recipe Studio now lives in:  ${target}`);
-      say(`  The old folder is still at:  ${movedFrom}`);
-      say('  Nothing was deleted. Once the Studio works from the icon, that old');
-      say('  folder can be dragged to the Recycle Bin.');
-    }
-    say();
+    await finishInstall(target, release.etag, source.branch, notes, movedFrom);
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
   }
+}
+
+/**
+ * First-time setup, run from a freshly unzipped download. This folder *is* the
+ * new version, so there is nothing to fetch: put a copy where Windows can cope
+ * with it, find any earlier install and bring its recipes and photos across,
+ * and make the desktop icon. One double-click, wherever the ZIP was unzipped.
+ */
+async function firstTimeSetup(here, source) {
+  const notes = [];
+  const docs = documentsDir();
+  let target = path.join(docs, 'emma-cooking-blogg');
+  let n = 2;
+  while (fs.existsSync(target) && !isProject(target)) target = path.join(docs, `emma-cooking-blogg-${n++}`);
+
+  step(`Recipe Studio will live at:  ${target}`);
+
+  const targetIsInstall = isProject(target) && path.resolve(target) !== path.resolve(here);
+  const others = findInstalls([here, target]);
+  const withData = others.filter((o) => o.files > 0);
+
+  let movedFrom = null;
+  if (targetIsInstall) {
+    // Already set up there: refresh its program files, keep its library.
+    step('There is already a copy there. Updating it and keeping its recipes and photos.');
+    replaceCode(here, target, notes);
+    if (withData.length) {
+      notes.push(`Another copy with ${withData[0].files} files was also found at ${withData[0].dir} — it was left alone.`);
+    }
+  } else {
+    const from = withData[0] || null;
+    if (from) {
+      step(`Found your earlier copy, with ${from.files} recipe and photo files:`);
+      detail(from.dir);
+      if (withData.length > 1) {
+        detail(`(${withData.length - 1} other copies found with fewer files; the fullest one is used.)`);
+      }
+    } else {
+      step('No earlier copy with recipes or photos was found, so this is a clean start.');
+    }
+    const carried = installFresh(here, target, from?.dir, notes);
+    if (carried) {
+      detail(`Copied ${carried.files} files (${(carried.bytes / 1048576).toFixed(1)} MB) and checked every one arrived.`);
+      movedFrom = from.dir;
+    }
+  }
+
+  // A downloaded copy carries no history, so the first update check must not
+  // report the version just installed as new: record what it is.
+  let etag = '';
+  try { etag = (await fetchRelease(source, null)).etag || ''; } catch { /* offline is fine */ }
+
+  await finishInstall(target, etag, source.branch, notes, movedFrom);
+}
+
+/** Everything that happens once the files are in place. */
+async function finishInstall(target, etag, branch, notes, movedFrom) {
+  step('Installing the parts it needs (this can take a minute)...');
+  const installed = process.env.RECIPE_STUDIO_SKIP_INSTALL
+    ? { status: 0 }                                    // used by the test suite
+    : spawnSync('npm', ['install', '--no-audit', '--no-fund'], {
+        cwd: target, stdio: 'inherit', shell: true,
+      });
+  if (installed.status !== 0) {
+    problem('npm install did not finish cleanly. The files are in place — try starting the Studio, and run "Check for problems" if it misbehaves.');
+  }
+
+  if (process.platform === 'win32') {
+    step('Pointing the desktop icon at the current folder...');
+    spawnSync('powershell', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass',
+      '-File', path.join(target, 'scripts', 'install-shortcut.ps1'),
+    ], { cwd: target, stdio: 'inherit' });
+  }
+
+  fs.writeFileSync(
+    path.join(target, STATE_FILE),
+    JSON.stringify({ etag, updatedAt: new Date().toISOString(), branch }, null, 2)
+  );
+
+  let health = { status: 0 };
+  if (!process.env.RECIPE_STUDIO_SKIP_INSTALL) {
+    step('Checking everything works...');
+    health = spawnSync(process.execPath, [path.join(target, 'scripts', 'doctor.js')],
+      { cwd: target, stdio: 'inherit' });
+  }
+
+  say();
+  if (health.status === 0) {
+    say('  Done. Start the Studio from the desktop icon as usual.');
+  } else {
+    // Never claim success over the top of a failed check.
+    say('  The new version is installed, but the check above found something');
+    say('  that still needs attention. Read the line marked with an X and do');
+    say('  what it says, then double-click "Check for problems" again.');
+  }
+  for (const note of notes) detail(note);
+  if (movedFrom) {
+    say();
+    say(`  Recipe Studio now lives in:  ${target}`);
+    say(`  The old folder is still at:  ${movedFrom}`);
+    say('  Nothing was deleted. Once the Studio works from the icon, that old');
+    say('  folder can be dragged to the Recycle Bin.');
+  }
+  say();
 }
 
 /** Used by the Studio at startup to show a quiet "newer version" note. */
