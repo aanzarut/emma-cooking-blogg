@@ -114,7 +114,7 @@ network (not one on wifi and one on cellular), and that the wifi isn't a
 | `npm run studio` | Start the Studio (same as the .bat file) |
 | `npm run build` | Build the website into `dist/` |
 | `npm run preview` | Serve the built website on its own at <http://localhost:4322> |
-| `npm run doctor` | Check the installation |
+| `npm run doctor` | Check the installation (or double-click `Check for problems.bat`) |
 | `npm run icon` | Rebuild the desktop icon from `assets/icon.svg` |
 
 ## Changing the dropdown lists
@@ -132,8 +132,8 @@ name, tagline and address.
 **Photos won't upload from the phone** — see step 6.
 
 **Photos in the Inbox are broken or blank** — almost always the folder path is
-too long; see step 2. Run `npm run doctor`, which reports the path length and
-whether thumbnails can actually be written. Move the project to
+too long; see step 2. Double-click `Check for problems.bat`, which reports the
+path length and whether thumbnails can actually be written. Move the project to
 `Documents\emma-cooking-blogg` and restart the Studio.
 
 **HEIC photos look broken** — iPhones shoot HEIC; the Studio converts them to
