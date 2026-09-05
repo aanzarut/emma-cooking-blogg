@@ -49,13 +49,15 @@ method. Without it everything still works; she just types more.
 
 1. Go to <https://console.anthropic.com>, create an account, and add a small
    amount of credit.
-2. Create an API key and copy it.
-3. In the project folder, copy `.env.example` to a new file named `.env`.
-4. Paste the key in:
+2. Open **Settings -> API keys**, create a key, and copy it.
+3. In the project folder, double-click **`Set up recipe reading.bat`**, and
+   paste the key when it asks.
 
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
+The script checks the key against Anthropic before saving it, so a partial
+copy or a stale key is caught immediately rather than failing weeks later. It
+writes `.env` for you — worth having, because creating a file called `.env`
+by hand on Windows is awkward: Notepad appends `.txt` and Explorer hides
+extensions. Existing settings in the file are kept.
 
 `.env` is listed in `.gitignore`, so the key never leaves the computer and is
 never committed.
@@ -144,6 +146,7 @@ the copy it installs, so the switch reaches every PC on its next update.
 | `npm run doctor` | Check the installation (or double-click `Check for problems.bat`) |
 | `npm run icon` | Rebuild the desktop icon from `assets/icon.svg` |
 | `npm run update` | Fetch and install the latest version (or double-click `Update.bat`) |
+| `npm run key` | Set up or replace the recipe-reading key (or double-click `Set up recipe reading.bat`) |
 
 ## Changing the dropdown lists
 

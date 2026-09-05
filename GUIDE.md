@@ -66,6 +66,10 @@ The recipe screen has four tabs.
 
 ### Read the card for me
 
+If **✨ Read the recipe card** is missing from the top of the screen, reading
+has not been switched on yet — double-click **Set up recipe reading** in the
+project folder once, and it appears.
+
 If you filed a picture of the recipe card, press **✨ Read the recipe card** at
 the top. It reads the handwriting and fills in the name, ingredients, method,
 who it came from, and some tags. It takes about ten seconds.

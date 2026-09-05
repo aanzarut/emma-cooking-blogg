@@ -13,7 +13,8 @@
     "preview": "node site/preview.js",
     "doctor": "node scripts/doctor.js",
     "icon": "node scripts/make-icon.js",
-    "update": "node scripts/update.js"
+    "update": "node scripts/update.js",
+    "key": "node scripts/setup-key.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
