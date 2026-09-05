@@ -194,7 +194,9 @@ label.field > span { display: block; font-size: 13px; font-weight: 600; color: v
   border-radius: var(--radius); overflow: hidden; border: 2px solid var(--line);
   background: #ece8e2; aspect-ratio: 1;
 }
-.tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* contain, not cover: a portrait recipe card must be visible whole, not
+   cropped to its middle. */
+.tile img { width: 100%; height: 100%; object-fit: contain; display: block; background: #ded9d1; }
 .tile .pdf { display: grid; place-items: center; height: 100%; font-size: 13px; color: var(--ink-soft); gap: 6px; }
 .tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .tile .tick {
@@ -203,6 +205,22 @@ label.field > span { display: block; font-size: 13px; font-weight: 600; color: v
   display: grid; place-items: center; font-size: 14px; color: transparent;
 }
 .tile[aria-pressed="true"] .tick { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tile .zoom {
+  position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255,255,255,.92); border: 1px solid var(--line-strong);
+  display: grid; place-items: center; font-size: 13px; opacity: 0; transition: opacity .12s;
+}
+.tile:hover .zoom, .tile:focus-within .zoom { opacity: 1; }
+.tile .zoom:hover { background: #fff; border-color: var(--ink-faint); }
+
+.thumb-failed {
+  display: grid; place-content: center; gap: 2px; height: 100%; padding: 10px;
+  text-align: center; font-size: 12px; color: var(--ink-soft); background: #f0ece6;
+}
+.thumb-failed .hint { font-size: 11px; }
+
+.photo-open { all: unset; cursor: zoom-in; display: block; }
+.photo-open img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #ece8e2; }
 
 /* ------------------------------------------------------------ action bar */
 
@@ -313,3 +331,40 @@ pre.log { background: #1f272f; color: #d6e0ea; padding: 14px; border-radius: 9px
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13.5px; }
 .kv dt { color: var(--ink-soft); }
 .kv dd { margin: 0; }
+
+/* ---------------------------------------------------------------- viewer */
+
+.viewer {
+  position: fixed; inset: 0; z-index: 80; background: rgba(20, 24, 29, .93);
+  /* minmax(0, 1fr), not 1fr: the row must be allowed to shrink below the
+     image's natural height, otherwise a tall photo overflows the window. */
+  display: grid; grid-template-rows: auto minmax(0, 1fr); color: #edf1f5;
+}
+.viewer-bar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.viewer-bar .grow { flex: 1; min-width: 0; }
+.viewer-caption { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-count { font-size: 13px; color: #9db0c1; font-variant-numeric: tabular-nums; }
+.viewer-close {
+  all: unset; cursor: pointer; width: 34px; height: 34px; border-radius: 8px;
+  display: grid; place-items: center; font-size: 16px;
+}
+.viewer-close:hover { background: rgba(255,255,255,.14); }
+
+.viewer-stage { display: flex; gap: 12px; padding: 20px; min-height: 0; }
+.viewer-frame {
+  flex: 1 1 auto; min-width: 0; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.viewer-frame img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.viewer-pdf { color: #9db0c1; font-size: 15px; text-align: center; }
+.viewer-arrow {
+  all: unset; cursor: pointer; flex: 0 0 auto; align-self: center;
+  width: 46px; height: 68px; border-radius: 10px;
+  display: grid; place-items: center; font-size: 30px; color: #edf1f5;
+  background: rgba(255,255,255,.08);
+}
+.viewer-arrow:hover { background: rgba(255,255,255,.18); }
+@media (max-width: 640px) { .viewer-arrow { width: 36px; font-size: 24px; } }

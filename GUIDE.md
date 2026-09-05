@@ -43,6 +43,11 @@ You can also drag photo files from a folder straight onto the app window.
 
 In the **Inbox**, tap the photos that belong to one recipe. They get a tick.
 
+To look at one properly before deciding — to check a recipe card is actually
+readable, say — **double-click it**, or click the magnifying glass in its
+corner. It opens full size; the arrow keys move between photos and **Esc**
+closes it.
+
 Then, along the bottom:
 
 - **File as** — is this a picture *of the recipe card*, or a photo of the
@@ -89,6 +94,8 @@ on the website. Leave a blank line between paragraphs.
 
 Your dish photos and your card photos.
 
+- Click a photo to see it full size — useful for reading a recipe card while
+  you check the typed-in version against it.
 - **Make main** — which photo shows on the website and in the recipe list.
 - **Touch up** — opens the photo editor (below).
 - The ✕ removes a photo from this recipe.

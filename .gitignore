@@ -9,6 +9,7 @@ dist/
 library/.cache/
 library/.trash/
 library/inbox/.discarded/
+library/inbox/.heic-originals/
 
 # Operating system clutter
 .DS_Store

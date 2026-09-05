@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { ensureDir, ROOT } from './paths.js';
 
@@ -11,21 +12,39 @@ export const DOC_EXTS = new Set(['.pdf']);
 
 const CACHE_DIR = path.join(ROOT, 'library', '.cache', 'thumbs');
 
+/**
+ * 'image' — a browser can show it and sharp can process it.
+ * 'heic'  — an iPhone original: accepted on upload, converted, then put away.
+ *           Nothing downstream can display or edit it.
+ * 'pdf'   — kept and sent to the transcriber, shown as an icon.
+ */
 export function kindOf(filename) {
   const ext = path.extname(filename).toLowerCase();
-  if (IMAGE_EXTS.has(ext) || HEIC_EXTS.has(ext)) return 'image';
+  if (IMAGE_EXTS.has(ext)) return 'image';
+  if (HEIC_EXTS.has(ext)) return 'heic';
   if (DOC_EXTS.has(ext)) return 'pdf';
   return 'other';
 }
 
+/** Will an upload of this be taken at all? HEIC counts: it gets converted. */
 export function isAccepted(filename) {
   return kindOf(filename) !== 'other';
 }
 
+/** Can this file be put in front of a person as-is? HEIC never can. */
+export function isRenderable(filename) {
+  const kind = kindOf(filename);
+  return kind === 'image' || kind === 'pdf';
+}
+
+/** Where camera originals go once a working JPEG has been made from them. */
+export const HEIC_ORIGINALS_DIRNAME = '.heic-originals';
+
 /**
- * iPhones shoot HEIC. Browsers cannot display it, so anything HEIC that lands
- * in the inbox is converted to a high-quality JPEG once, on arrival, and the
- * original .heic is kept alongside it.
+ * iPhones shoot HEIC, which no browser can display. Anything HEIC is converted
+ * to a high-quality JPEG on arrival, and the camera original is moved into a
+ * hidden folder beside it — kept, because it is the untouched original, but
+ * out of the way, because nothing in the app can show or edit it.
  */
 export async function normalizeUpload(filePath) {
   const ext = path.extname(filePath).toLowerCase();
@@ -33,10 +52,11 @@ export async function normalizeUpload(filePath) {
 
   const jpegPath = filePath.slice(0, -ext.length) + '.jpg';
   try {
-    // sharp handles HEIC when libvips was built with libheif.
+    // sharp only decodes HEIF when libvips was built with an HEVC-capable
+    // libheif; the published binaries handle AVIF only, so this usually throws.
     await sharp(filePath).rotate().jpeg({ quality: 92 }).toFile(jpegPath);
   } catch {
-    // Fall back to the pure-JavaScript decoder.
+    // Fall back to the pure-JavaScript decoder, which does handle iPhone HEIC.
     const { default: heicConvert } = await import('heic-convert');
     const buffer = await heicConvert({
       buffer: fs.readFileSync(filePath),
@@ -44,6 +64,12 @@ export async function normalizeUpload(filePath) {
       quality: 0.92,
     });
     fs.writeFileSync(jpegPath, buffer);
+  }
+
+  // Only once the JPEG is definitely on disk.
+  if (fs.existsSync(jpegPath) && fs.statSync(jpegPath).size > 0) {
+    const keep = ensureDir(path.join(path.dirname(filePath), HEIC_ORIGINALS_DIRNAME));
+    fs.renameSync(filePath, path.join(keep, path.basename(filePath)));
   }
   return jpegPath;
 }
@@ -61,11 +87,23 @@ export async function metadata(filePath) {
   };
 }
 
-/** Cached thumbnail, keyed by file path + mtime so edits invalidate it. */
+/**
+ * Cached thumbnail, keyed by file path + mtime so edits invalidate it.
+ *
+ * The key is hashed rather than derived from the path itself. A readable key
+ * grows with the path, and on Windows the whole cache path then runs past the
+ * 260-character limit and every write fails — which is exactly what broke
+ * every preview in the Inbox. Sixteen hex characters is short, fixed-length
+ * however deep the project sits, and cannot collide the way a truncated
+ * prefix could.
+ */
 export async function thumbnail(filePath, width = 480) {
   ensureDir(CACHE_DIR);
   const stat = fs.statSync(filePath);
-  const key = Buffer.from(`${filePath}|${stat.mtimeMs}|${width}`).toString('base64url').slice(0, 120);
+  const key = createHash('sha1')
+    .update(`${filePath}|${stat.mtimeMs}|${width}`)
+    .digest('hex')
+    .slice(0, 16);
   const out = path.join(CACHE_DIR, `${key}.jpg`);
   if (fs.existsSync(out)) return out;
   await sharp(filePath)

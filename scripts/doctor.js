@@ -22,6 +22,32 @@ try {
   check('Photo processing works', false, err.message);
 }
 
+// Rendering a thumbnail into the real cache folder, because that is where it
+// actually broke: on Windows the cache path ran past the 260-character limit
+// and every preview in the Inbox failed with nothing to show for it.
+const probe = path.join(LIBRARY_DIR, '.cache', 'doctor-probe.jpg');
+try {
+  const sharp = (await import('sharp')).default;
+  const { thumbnail } = await import('../studio/lib/images.js');
+  fs.mkdirSync(path.dirname(probe), { recursive: true });
+  await sharp({ create: { width: 400, height: 300, channels: 3, background: '#c2643c' } })
+    .jpeg().toFile(probe);
+  const out = await thumbnail(probe, 240);
+  check('Photo previews work', fs.existsSync(out) && fs.statSync(out).size > 0,
+    'thumbnails could not be written');
+
+  const longest = path.join(LIBRARY_DIR, '.cache', 'thumbs', 'x'.repeat(20));
+  const room = 260 - longest.length;
+  check('Folder path is short enough', room > 40,
+    `the project folder is too deeply nested (${longest.length} of 260 characters used) — ` +
+    'move it somewhere shorter, such as Documents\\emma-cooking-blogg',
+    `${longest.length} of 260 characters used`);
+} catch (err) {
+  check('Photo previews work', false, err.message);
+} finally {
+  fs.rmSync(probe, { force: true });
+}
+
 for (const dir of [LIBRARY_DIR, RECIPES_DIR, INBOX_DIR]) {
   check(`Folder ${path.relative(ROOT, dir)}`, fs.existsSync(dir), 'created automatically on first run');
 }

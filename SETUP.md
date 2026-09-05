@@ -26,9 +26,18 @@ cd emma-cooking-blogg
 npm install
 ```
 
-If Git isn't installed, download the repository as a ZIP from GitHub, unzip it
-somewhere sensible (`C:\Users\<name>\Documents\emma-cooking-blogg`), open
-Command Prompt in that folder, and run `npm install`.
+If Git isn't installed, download the repository as a ZIP from GitHub, unzip it,
+open Command Prompt in that folder, and run `npm install`.
+
+**Keep the folder path short — this matters.** Put it at
+`C:\Users\<name>\Documents\emma-cooking-blogg` and rename the folder to
+exactly that if the download gave it a longer name. Windows refuses to write
+any file whose full path exceeds 260 characters. A ZIP downloaded from a branch
+carries a ~57-character folder name, and Explorer's *Extract All* nests it
+inside another folder of the same name — enough on its own to push the Studio's
+internal files past the limit. When that happens, **photo previews in the Inbox
+fail** with nothing on screen to say why. `npm run doctor` measures this and
+warns before it bites.
 
 `npm install` takes a couple of minutes the first time — it fetches the photo
 processing library, which includes compiled Windows binaries.
@@ -122,9 +131,17 @@ name, tagline and address.
 
 **Photos won't upload from the phone** — see step 6.
 
+**Photos in the Inbox are broken or blank** — almost always the folder path is
+too long; see step 2. Run `npm run doctor`, which reports the path length and
+whether thumbnails can actually be written. Move the project to
+`Documents\emma-cooking-blogg` and restart the Studio.
+
 **HEIC photos look broken** — iPhones shoot HEIC; the Studio converts them to
-JPEG when they arrive. If one fails, set the iPhone's *Settings → Camera →
-Formats* to **Most Compatible** and re-send it.
+JPEG on arrival and files the camera original away in
+`library/inbox/.heic-originals/`, so only the JPEG ever appears in the Inbox.
+If a conversion fails outright, the phone's upload page says so; setting the
+iPhone's *Settings → Camera → Formats* to **Most Compatible** avoids HEIC
+altogether.
 
 **A recipe disappeared** — nothing is deleted outright. Look in
 `library/.trash/` (recipes) and `library/inbox/.discarded/` (photos).

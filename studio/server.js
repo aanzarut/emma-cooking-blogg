@@ -110,7 +110,7 @@ function summarize(r) {
 
 function countFiles(dir) {
   if (!fs.existsSync(dir)) return 0;
-  return fs.readdirSync(dir).filter((f) => !f.startsWith('.') && images.isAccepted(f)).length;
+  return fs.readdirSync(dir).filter((f) => !f.startsWith('.') && images.isRenderable(f)).length;
 }
 
 function heroSrc(r) {
@@ -131,7 +131,7 @@ function heroSrc(r) {
 
 function firstFile(dir) {
   if (!fs.existsSync(dir)) return '';
-  return fs.readdirSync(dir).filter((f) => !f.startsWith('.') && images.isAccepted(f)).sort()[0] || '';
+  return fs.readdirSync(dir).filter((f) => !f.startsWith('.') && images.isRenderable(f)).sort()[0] || '';
 }
 
 router.get('/api/recipes', async (_req, res) => {
@@ -186,7 +186,7 @@ router.post('/api/recipes/:slug/transcribe', async (req, res, { params }) => {
 
     const p = recipePaths(params.slug);
     const scans = fs.existsSync(p.scans)
-      ? fs.readdirSync(p.scans).filter((f) => !f.startsWith('.') && images.isAccepted(f)).sort()
+      ? fs.readdirSync(p.scans).filter((f) => !f.startsWith('.') && images.isRenderable(f)).sort()
       : [];
     if (!scans.length) {
       return fail(res, 'Add a photo of the recipe card first, then press Read again.');
@@ -221,7 +221,7 @@ function photoList(slug) {
     if (!fs.existsSync(dir)) return [];
     return fs
       .readdirSync(dir)
-      .filter((f) => !f.startsWith('.') && images.isAccepted(f))
+      .filter((f) => !f.startsWith('.') && images.isRenderable(f))
       .sort()
       .map((name) => {
         const editedPath = path.join(p.edited, name);
@@ -361,10 +361,19 @@ router.get('/files/*', async (_req, res, { params, query }) => {
   try {
     const target = safeJoin(LIBRARY_DIR, params.wildcard);
     if (!fs.existsSync(target)) return sendText(res, 404, 'Not found');
+
     const width = Number(query.get('w'));
     if (width && images.kindOf(target) === 'image') {
-      const thumb = await images.thumbnail(target, Math.min(2000, Math.max(80, width)));
-      return sendFile(res, thumb, { cache: 'private, max-age=60' });
+      try {
+        const thumb = await images.thumbnail(target, Math.min(2000, Math.max(80, width)));
+        return sendFile(res, thumb, { cache: 'private, max-age=60' });
+      } catch (err) {
+        // A thumbnail is an optimisation, never a precondition for seeing the
+        // photo. Serving the original keeps the picture on screen, and the
+        // console line means the cause is not invisible.
+        console.warn(`  Could not make a thumbnail for ${path.basename(target)}: ${err.message}`);
+        console.warn('  Showing the full-size photo instead. Run "npm run doctor" for details.');
+      }
     }
     sendFile(res, target, { cache: 'private, max-age=60' });
   } catch (err) { sendText(res, 400, err.message); }

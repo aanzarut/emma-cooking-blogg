@@ -161,6 +161,88 @@ function topbar(title, subtitle, ...actions) {
     ...actions);
 }
 
+/* ----------------------------------------------------------------- viewer */
+
+/**
+ * Full-size photo viewer. Takes a list of { label, src, kind } and the one to
+ * open on. Needed because a thumbnail is far too small to judge whether a
+ * photographed recipe card is actually legible.
+ */
+function openViewer(photos, startIndex = 0) {
+  if (!photos.length) return;
+  let index = Math.max(0, Math.min(startIndex, photos.length - 1));
+
+  const img = el('img', { alt: '', draggable: false });
+  const caption = el('div', { class: 'viewer-caption' });
+  const counter = el('span', { class: 'viewer-count' });
+
+  const pdfNote = el('div', { class: 'viewer-pdf', hidden: true },
+    '\u{1F4C4} This is a PDF. Open it from the library folder to read it.');
+
+  const show = () => {
+    const photo = photos[index];
+    const isPdf = photo.kind === 'pdf';
+    img.hidden = isPdf;
+    pdfNote.hidden = !isPdf;
+    if (!isPdf) img.src = photo.src;
+    caption.textContent = photo.label;
+    counter.textContent = photos.length > 1 ? `${index + 1} of ${photos.length}` : '';
+  };
+
+  const move = (step) => {
+    index = (index + step + photos.length) % photos.length;
+    show();
+  };
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowLeft') move(-1);
+    else if (e.key === 'ArrowRight') move(1);
+  };
+
+  function close() {
+    document.removeEventListener('keydown', onKey);
+    backdrop.remove();
+  }
+
+  const arrow = (label, step) =>
+    photos.length > 1
+      ? el('button', {
+          class: 'viewer-arrow', 'aria-label': label,
+          onclick: (e) => { e.stopPropagation(); move(step); },
+        }, step < 0 ? '‹' : '›')
+      : null;
+
+  const backdrop = el('div', {
+    class: 'viewer',
+    onclick: (e) => { if (e.target === backdrop || e.target.classList.contains('viewer-stage')) close(); },
+  },
+    el('div', { class: 'viewer-bar' },
+      el('span', { class: 'grow' }, caption),
+      counter,
+      el('button', { class: 'viewer-close', 'aria-label': 'Close', onclick: close }, '✕')),
+    el('div', { class: 'viewer-stage' },
+      arrow('Previous photo', -1),
+      el('div', { class: 'viewer-frame' }, img, pdfNote),
+      arrow('Next photo', 1)));
+
+  document.addEventListener('keydown', onKey);
+  document.body.append(backdrop);
+  show();
+}
+
+/** A thumbnail that says something useful when it cannot be shown. */
+function thumbImage(src, label) {
+  const img = el('img', { src, alt: label, loading: 'lazy' });
+  img.addEventListener('error', () => {
+    img.replaceWith(el('div', { class: 'thumb-failed' },
+      el('div', { style: { fontSize: '22px' } }, '⚠'),
+      el('div', {}, 'Could not show this photo'),
+      el('div', { class: 'hint' }, 'Run npm run doctor')));
+  });
+  return img;
+}
+
 /* ------------------------------------------------------------------ inbox */
 
 function viewInbox() {
@@ -180,20 +262,32 @@ function viewInbox() {
         el('button', { class: 'btn primary', onclick: showUploadHelp }, 'Show me how'))));
   }
 
-  const tiles = items.map((item) =>
+  // One entry per inbox photo, so the viewer can page through the whole tray.
+  const viewable = items.map((item) => ({
+    label: item.file,
+    kind: item.kind,
+    src: `${item.src}?w=2000`,
+  }));
+
+  const tiles = items.map((item, i) =>
     el('button', {
       class: 'tile',
       'aria-pressed': String(state.selected.has(item.file)),
-      title: item.file,
+      title: `${item.file} — click to select, double-click to see it full size`,
       onclick: () => {
         state.selected.has(item.file) ? state.selected.delete(item.file) : state.selected.add(item.file);
         render();
       },
+      ondblclick: (e) => { e.preventDefault(); openViewer(viewable, i); },
     },
       item.kind === 'pdf'
         ? el('div', { class: 'pdf' }, el('div', { style: { fontSize: '30px' } }, '\u{1F4C4}'), 'PDF')
-        : el('img', { src: `${item.src}?w=360`, alt: item.file, loading: 'lazy' }),
-      el('span', { class: 'tick' }, '✓')));
+        : thumbImage(`${item.src}?w=360`, item.file),
+      el('span', { class: 'tick' }, '✓'),
+      el('span', {
+        class: 'zoom', title: 'See this photo full size',
+        onclick: (e) => { e.stopPropagation(); openViewer(viewable, i); },
+      }, '\u{1F50D}')));
 
   mount(document.getElementById('view'),
     el('div', { class: 'panel' },
@@ -547,10 +641,18 @@ function tabPhotos() {
 function photoTile(photo) {
   const isHero = state.recipe.heroImage === photo.name;
   const preview = photo.editedSrc || photo.thumb;
+  const siblings = state.photos
+    .filter((p) => p.role === photo.role && p.kind !== 'pdf')
+    .map((p) => ({ label: p.name, kind: p.kind, src: `${p.src}?w=2000` }));
+  const startAt = Math.max(0, siblings.findIndex((p) => p.label === photo.name));
+
   return el('figure', { class: isHero ? 'isHero' : '' },
     photo.kind === 'pdf'
       ? el('div', { style: { display: 'grid', placeItems: 'center', aspectRatio: '1', fontSize: '30px', background: '#ece8e2' } }, '\u{1F4C4}')
-      : el('img', { src: preview, alt: photo.name, loading: 'lazy' }),
+      : el('button', {
+          class: 'photo-open', title: 'See this photo full size',
+          onclick: () => openViewer(siblings, startAt),
+        }, thumbImage(preview, photo.name)),
     el('figcaption', {},
       photo.role === 'photo' && photo.kind === 'image'
         ? el('button', { class: 'btn small', onclick: () => { state.editing = photo.name; render(); } }, '\u{1F58C} Touch up')

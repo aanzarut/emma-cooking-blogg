@@ -76,3 +76,9 @@ The recipes and photos live in `library/`, and photos are committed to git, so
 pushing to GitHub *is* a backup. For a second copy, occasionally copy the
 `library` folder to an external drive — that folder alone is the whole
 archive.
+
+One exception: `library/inbox/.heic-originals/` — the untouched iPhone files
+kept after conversion — is deliberately left out of git, because a few hundred
+of them would add a gigabyte to the repository for files nothing can open. Only
+the external-drive copy covers those. Everything the Studio and the website
+actually use is committed.

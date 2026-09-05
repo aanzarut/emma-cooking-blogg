@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import busboy from 'busboy';
 import { INBOX_DIR, ensureDir, safeJoin, recipePaths } from './paths.js';
-import { isAccepted, kindOf, normalizeUpload } from './images.js';
+import { isAccepted, isRenderable, kindOf, normalizeUpload } from './images.js';
 
 const MAX_FILE_BYTES = 60 * 1024 * 1024; // one 60 MB photo is already huge
 
@@ -81,7 +81,9 @@ export function listInbox() {
   ensureDir(INBOX_DIR);
   return fs
     .readdirSync(INBOX_DIR, { withFileTypes: true })
-    .filter((d) => d.isFile() && !d.name.startsWith('.') && isAccepted(d.name))
+    // isRenderable, not isAccepted: a leftover .heic is accepted on upload but
+    // can never be shown, so it must not become a tile.
+    .filter((d) => d.isFile() && !d.name.startsWith('.') && isRenderable(d.name))
     .map((d) => {
       const full = path.join(INBOX_DIR, d.name);
       const stat = fs.statSync(full);
