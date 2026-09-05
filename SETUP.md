@@ -35,6 +35,8 @@ That one double-click:
   every file arrived;
 - installs what it needs (a couple of minutes the first time);
 - makes the desktop icon;
+- **asks for the recipe-reading key** — paste it if you have one (step 3),
+  or press Enter to do it later;
 - runs the installation check.
 
 Nothing is ever deleted. It names the folder it copied from so you can remove
@@ -61,17 +63,21 @@ installing to a short path; `Check for problems` measures it.
 This is what turns a photo of a recipe card into filled-in ingredients and
 method. Without it everything still works; she just types more.
 
-1. Go to <https://console.anthropic.com>, create an account, and add a small
-   amount of credit.
-2. Open **Settings -> API keys**, create a key, and copy it.
-3. In the project folder, double-click **`Set up recipe reading.bat`**, and
-   paste the key when it asks.
+**Best done before step 2**, so the key can be pasted straight into setup:
 
-The script checks the key against Anthropic before saving it, so a partial
-copy or a stale key is caught immediately rather than failing weeks later. It
-writes `.env` for you — worth having, because creating a file called `.env`
-by hand on Windows is awkward: Notepad appends `.txt` and Explorer hides
-extensions. Existing settings in the file are kept.
+1. Go to <https://console.anthropic.com>, create an account, and add a small
+   amount of credit — a working key with no credit reads nothing.
+2. Open **Settings -> API keys**, create a key, and copy it.
+3. When `Set up on this PC` asks for it, right-click to paste, then Enter.
+
+Missed it, or need to change the key later? Double-click
+**`Set up recipe reading.bat`** in the project folder — same prompt, any time.
+
+Either way the key is checked against Anthropic before it is saved, so a
+partial copy or a stale key is caught immediately rather than failing weeks
+later. It writes `.env` for you — worth having, because creating a file called
+`.env` by hand on Windows is awkward: Notepad appends `.txt` and Explorer
+hides extensions. Existing settings in the file are kept.
 
 `.env` is listed in `.gitignore`, so the key never leaves the computer and is
 never committed.

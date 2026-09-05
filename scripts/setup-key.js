@@ -91,6 +91,9 @@ function clearScreen() {
   if (process.stdout.isTTY) process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
 }
 
+// Run from first-time setup, where skipping is a normal choice, not a failure.
+const OPTIONAL = process.argv.includes('--optional');
+
 async function main() {
   say();
   say('  Recipe reading - setup');
@@ -98,6 +101,11 @@ async function main() {
   say();
   say('  This lets the Studio read a photographed recipe card and fill in the');
   say('  ingredients and method for you. Everything else works without it.');
+  if (OPTIONAL) {
+    say();
+    say('  You can do this now, or later by double-clicking "Set up recipe reading".');
+    say('  To do it later, just press Enter when asked for the key.');
+  }
   say();
 
   const existing = readEnv().find((line) => /^\s*ANTHROPIC_API_KEY\s*=\s*\S/.test(line));
@@ -129,6 +137,12 @@ async function main() {
   say();
 
   if (!key) {
+    if (OPTIONAL) {
+      say('  Skipped for now. Double-click "Set up recipe reading" whenever you');
+      say('  are ready - everything else works in the meantime.');
+      say();
+      return;
+    }
     say('  Nothing pasted, so nothing was changed. Run this again when ready.');
     say();
     process.exitCode = 1;

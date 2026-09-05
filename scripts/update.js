@@ -484,11 +484,11 @@ async function firstTimeSetup(here, source) {
   let etag = '';
   try { etag = (await fetchRelease(source, null)).etag || ''; } catch { /* offline is fine */ }
 
-  await finishInstall(target, etag, source.branch, notes, movedFrom);
+  await finishInstall(target, etag, source.branch, notes, movedFrom, { offerKey: true });
 }
 
 /** Everything that happens once the files are in place. */
-async function finishInstall(target, etag, branch, notes, movedFrom) {
+async function finishInstall(target, etag, branch, notes, movedFrom, { offerKey = false } = {}) {
   step('Installing the parts it needs (this can take a minute)...');
   const installed = process.env.RECIPE_STUDIO_SKIP_INSTALL
     ? { status: 0 }                                    // used by the test suite
@@ -511,6 +511,19 @@ async function finishInstall(target, etag, branch, notes, movedFrom) {
     path.join(target, STATE_FILE),
     JSON.stringify({ etag, updatedAt: new Date().toISOString(), branch }, null, 2)
   );
+
+  // First-time setup: the person wants card reading from the start, so ask
+  // for the key here rather than sending them to a second launcher. Runs
+  // after npm install (it needs the SDK) and before the health check (so the
+  // check reflects the answer). Skipping is fine and is not a failure.
+  if (offerKey && !process.env.RECIPE_STUDIO_SKIP_INSTALL) {
+    spawnSync(process.execPath, [path.join(target, 'scripts', 'setup-key.js'), '--optional'],
+      { cwd: target, stdio: 'inherit' });
+  } else if (offerKey && process.env.RECIPE_STUDIO_SKIP_INSTALL) {
+    // the test suite has no SDK in a bare install; still exercise the prompt
+    spawnSync(process.execPath, [path.join(target, 'scripts', 'setup-key.js'), '--optional'],
+      { cwd: target, stdio: 'inherit', env: { ...process.env, RECIPE_STUDIO_SKIP_KEY_CHECK: '1' } });
+  }
 
   let health = { status: 0 };
   if (!process.env.RECIPE_STUDIO_SKIP_INSTALL) {
