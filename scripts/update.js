@@ -487,14 +487,32 @@ async function firstTimeSetup(here, source) {
   await finishInstall(target, etag, source.branch, notes, movedFrom, { offerKey: true });
 }
 
+/**
+ * Run a long command and say something every so often while it runs. npm's
+ * own progress display renders poorly in a plain console window and can go
+ * silent for minutes while it downloads, which reads as "frozen" to someone
+ * watching — the exact moment they close the window.
+ */
+function runWithHeartbeat(command, args, { cwd, everyMs = 20000 } = {}) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const child = spawn(command, args, { cwd, stdio: 'inherit', shell: true });
+    const beat = setInterval(() => {
+      const secs = Math.round((Date.now() - started) / 1000);
+      console.log(`    ... still installing (${secs}s so far). Leave this window open.`);
+    }, everyMs);
+    child.on('exit', (code) => { clearInterval(beat); resolve({ status: code ?? 1 }); });
+    child.on('error', (err) => { clearInterval(beat); console.log(`    npm could not be started: ${err.message}`); resolve({ status: 1 }); });
+  });
+}
+
 /** Everything that happens once the files are in place. */
 async function finishInstall(target, etag, branch, notes, movedFrom, { offerKey = false } = {}) {
-  step('Installing the parts it needs (this can take a minute)...');
+  step('Installing the parts it needs (this can take a few minutes)...');
+  detail('It may look as though nothing is happening. It is. Leave this window open.');
   const installed = process.env.RECIPE_STUDIO_SKIP_INSTALL
     ? { status: 0 }                                    // used by the test suite
-    : spawnSync('npm', ['install', '--no-audit', '--no-fund'], {
-        cwd: target, stdio: 'inherit', shell: true,
-      });
+    : await runWithHeartbeat('npm', ['install', '--no-audit', '--no-fund'], { cwd: target });
   if (installed.status !== 0) {
     problem('npm install did not finish cleanly. The files are in place — try starting the Studio, and run "Check for problems" if it misbehaves.');
   }
