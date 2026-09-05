@@ -83,6 +83,15 @@ function documentsDir() {
   return os.homedir();
 }
 
+/** Uncommitted work in a git checkout, or '' when there is none to worry about. */
+function gitChanges(projectRoot) {
+  if (!fs.existsSync(path.join(projectRoot, '.git'))) return '';
+  const result = spawnSync('git', ['status', '--porcelain'], { cwd: projectRoot, encoding: 'utf8' });
+  if (result.status !== 0) return '';
+  const lines = (result.stdout || '').trim().split('\n').filter(Boolean);
+  return lines.length ? lines.slice(0, 8).map((l) => `    ${l}`).join('\n') : '';
+}
+
 /** Refuse to work underneath a running Studio. */
 function studioIsRunning(projectRoot) {
   let port = 4321;
@@ -261,6 +270,14 @@ async function main() {
   }
   if (await studioIsRunning(projectRoot)) {
     stop('Recipe Studio is still running. Close its black window, then run this again.');
+  }
+  // Someone working on the project itself would lose uncommitted edits, since
+  // the update replaces every code file. The people this is built for install
+  // from a download and have no repository here, so this never fires for them.
+  const uncommitted = gitChanges(projectRoot);
+  if (uncommitted && !force) {
+    stop(`This folder is a git checkout with uncommitted changes:\n${uncommitted}\n`
+       + '  Updating would overwrite them. Commit or stash first, or pass --force.');
   }
 
   const source = updateSource(projectRoot);

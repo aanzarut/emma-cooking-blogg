@@ -109,6 +109,24 @@ If the phone still can't reach it, check that the PC and phone are on the same
 network (not one on wifi and one on cellular), and that the wifi isn't a
 "guest" network with client isolation turned on.
 
+## A note on file names
+
+Windows hides the ending of files it recognises, so in the project folder the
+launchers appear without their `.bat`:
+
+| What you see | What it really is |
+|---|---|
+| **Update** | `Update.bat` |
+| **Check for problems** | `Check for problems.bat` |
+| **Install desktop icon** | `Install desktop icon.bat` |
+| **Set up recipe reading** | `Set up recipe reading.bat` |
+| **start-studio** | `start-studio.bat` |
+
+To see the endings: in File Explorer, **View** -> **Show** -> **File name
+extensions** (on Windows 10, **View** -> tick **File name extensions**).
+
+The Mac and Linux equivalents live in the `mac-linux` folder, out of the way.
+
 ## Updating later
 
 Double-click **`Update.bat`**. That is the whole procedure.

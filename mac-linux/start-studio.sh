@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts Recipe Studio. Press Ctrl+C to stop it.
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 if ! command -v node > /dev/null; then
   echo "Node.js is not installed yet. Get it from https://nodejs.org (the LTS version)."
