@@ -340,13 +340,22 @@ async function main() {
       JSON.stringify({ etag: release.etag, updatedAt: new Date().toISOString(), branch: source.branch }, null, 2)
     );
 
+    let health = { status: 0 };
     if (!process.env.RECIPE_STUDIO_SKIP_INSTALL) {
       step('Checking everything works...');
-      spawnSync(process.execPath, [path.join(target, 'scripts', 'doctor.js')], { cwd: target, stdio: 'inherit' });
+      health = spawnSync(process.execPath, [path.join(target, 'scripts', 'doctor.js')],
+        { cwd: target, stdio: 'inherit' });
     }
 
     say();
-    say('  Done. Start the Studio from the desktop icon as usual.');
+    if (health.status === 0) {
+      say('  Done. Start the Studio from the desktop icon as usual.');
+    } else {
+      // Never claim success over the top of a failed check.
+      say('  The new version is installed, but the check above found something');
+      say('  that still needs attention. Read the line marked with an X and do');
+      say('  what it says, then double-click "Check for problems" again.');
+    }
     for (const note of notes) detail(note);
     if (movedFrom) {
       say();
