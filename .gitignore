@@ -10,6 +10,7 @@ library/.cache/
 library/.trash/
 library/inbox/.discarded/
 library/inbox/.heic-originals/
+.update-state.json
 
 # Operating system clutter
 .DS_Store

@@ -13,6 +13,7 @@ import * as store from './lib/recipes.js';
 import * as images from './lib/images.js';
 import * as inbox from './lib/inbox.js';
 import * as ai from './lib/transcribe.js';
+import { checkForUpdate } from '../scripts/update.js';
 
 const PORT = Number(process.env.PORT || 4321);
 const PREVIEW_PORT = PORT + 1;
@@ -69,6 +70,7 @@ router.get('/api/bootstrap', async (_req, res) => {
       }, {}),
     },
     ai: { available: ai.isAvailable(), model: ai.DEFAULT_MODEL },
+    update: updateStatus,
     uploadUrl: `${lanAddress()}/upload`,
     previewUrl: `http://localhost:${PREVIEW_PORT}/`,
     statuses: store.STATUSES,
@@ -383,6 +385,22 @@ router.get('/files/*', async (_req, res, { params, query }) => {
 
 let lastBuild = { running: false, log: '', ok: null, at: '' };
 
+/* Asked once at startup, never on a schedule. Anything that goes wrong here —
+   no internet, GitHub down, a slow line — leaves the Studio working exactly as
+   it did, with the notice simply absent. */
+let updateStatus = { available: false, checkedAt: '' };
+
+function lookForUpdateQuietly() {
+  const timeout = setTimeout(() => {}, 0);
+  clearTimeout(timeout);
+  Promise.race([
+    checkForUpdate(ROOT),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timed out')), 5000)),
+  ])
+    .then((result) => { updateStatus = result; })
+    .catch(() => { /* offline, or GitHub unreachable: say nothing */ });
+}
+
 router.get('/api/publish/status', async (_req, res) => sendJson(res, 200, lastBuild));
 
 router.post('/api/publish', async (_req, res) => {
@@ -472,4 +490,5 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('');
 
   if (launchedFromIcon) openInBrowser(`http://localhost:${PORT}`);
+  lookForUpdateQuietly();
 });

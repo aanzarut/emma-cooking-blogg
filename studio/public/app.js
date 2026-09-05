@@ -148,6 +148,12 @@ function renderRail() {
     item('publish', '\u{1F310}', 'Publish'),
     item('help', '❓', 'How to use this'),
     el('div', { class: 'rail-foot' },
+      state.boot?.update?.available
+        ? el('div', { class: 'rail-update' },
+            el('strong', {}, 'A newer version is available.'),
+            el('br'),
+            'Close the Studio and double-click Update.')
+        : null,
       state.boot?.ai?.available ? 'Recipe reading is on.' : 'Recipe reading is off.',
       el('br'),
       'Everything is saved on this computer.'));
@@ -178,10 +184,16 @@ function openViewer(photos, startIndex = 0) {
 
   const pdfNote = el('div', { class: 'viewer-pdf', hidden: true },
     '\u{1F4C4} This is a PDF. Open it from the library folder to read it.');
+  const failedNote = el('div', { class: 'viewer-pdf', hidden: true },
+    '\u26A0 This photo could not be shown. The file may be damaged \u2014 send it from the phone again.');
+
+  // An unreadable file must say so here too, not leave an empty black frame.
+  img.addEventListener('error', () => { img.hidden = true; failedNote.hidden = false; });
 
   const show = () => {
     const photo = photos[index];
     const isPdf = photo.kind === 'pdf';
+    failedNote.hidden = true;
     img.hidden = isPdf;
     pdfNote.hidden = !isPdf;
     if (!isPdf) img.src = photo.src;
@@ -223,7 +235,7 @@ function openViewer(photos, startIndex = 0) {
       el('button', { class: 'viewer-close', 'aria-label': 'Close', onclick: close }, '✕')),
     el('div', { class: 'viewer-stage' },
       arrow('Previous photo', -1),
-      el('div', { class: 'viewer-frame' }, img, pdfNote),
+      el('div', { class: 'viewer-frame' }, img, pdfNote, failedNote),
       arrow('Next photo', 1)));
 
   document.addEventListener('keydown', onKey);

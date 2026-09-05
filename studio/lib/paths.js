@@ -32,6 +32,29 @@ export function recipePaths(slug) {
   };
 }
 
+/**
+ * Windows refuses to write a file whose full path exceeds 260 characters, and
+ * the Studio builds paths this deep beneath the project root:
+ *   library/recipes/<slug up to 60>/images/original/<date + name + extension>
+ * So the project folder itself has to stay short. Both the installation check
+ * and the updater measure against this.
+ */
+export const WINDOWS_MAX_PATH = Number(process.env.RECIPE_STUDIO_MAX_PATH || 260);
+export const DEEPEST_RELATIVE_PATH = path.join(
+  'library', 'recipes', 'x'.repeat(60), 'images', 'original', 'y'.repeat(65)
+);
+
+export function pathBudget(root = ROOT) {
+  const safeRootLength = WINDOWS_MAX_PATH - DEEPEST_RELATIVE_PATH.length - 1;
+  return {
+    root: root.length,
+    deepest: root.length + DEEPEST_RELATIVE_PATH.length + 1,
+    limit: WINDOWS_MAX_PATH,
+    safeRootLength,
+    ok: root.length <= safeRootLength,
+  };
+}
+
 export function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
   return dir;

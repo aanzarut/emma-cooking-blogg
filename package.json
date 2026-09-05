@@ -12,7 +12,8 @@
     "build": "node site/build.js",
     "preview": "node site/preview.js",
     "doctor": "node scripts/doctor.js",
-    "icon": "node scripts/make-icon.js"
+    "icon": "node scripts/make-icon.js",
+    "update": "node scripts/update.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
@@ -22,5 +23,9 @@
     "markdown-it": "^14.1.0",
     "qrcode": "^1.5.4",
     "sharp": "^0.33.5"
+  },
+  "updateSource": {
+    "repo": "aanzarut/emma-cooking-blogg",
+    "branch": "claude/cooking-blog-asset-system-a4jxrn"
   }
 }

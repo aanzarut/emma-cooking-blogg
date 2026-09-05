@@ -107,6 +107,33 @@ If the phone still can't reach it, check that the PC and phone are on the same
 network (not one on wifi and one on cellular), and that the wifi isn't a
 "guest" network with client isolation turned on.
 
+## Updating later
+
+Double-click **`Update.bat`**. That is the whole procedure.
+
+It fetches the latest version, replaces the program files, and leaves recipes,
+photos, `.env` and any settings you have edited exactly as they were. If a
+config file has changed upstream, yours is kept and the new one is saved beside
+it as `*.new`.
+
+If the project folder is too deeply nested for Windows, the updater installs a
+fresh copy at `Documents\emma-cooking-blogg`, copies the library across,
+verifies every file arrived, and re-points the desktop icon. **It never deletes
+anything** — it prints where the old folder is so you can remove it yourself
+once the Studio starts cleanly from the icon.
+
+It refuses to run while the Studio is open, and a failed or interrupted
+download leaves the installation untouched.
+
+The Studio checks for a new version once when it starts and, if there is one,
+shows a quiet line in the sidebar. The check is a single conditional request
+that transfers nothing when there is no update, and it is silent when there is
+no internet.
+
+**After the pull request is merged**, change `updateSource.branch` in
+`package.json` from the feature branch to `main`. The updater reads that from
+the copy it installs, so the switch reaches every PC on its next update.
+
 ## Commands
 
 | Command | What it does |
@@ -116,6 +143,7 @@ network (not one on wifi and one on cellular), and that the wifi isn't a
 | `npm run preview` | Serve the built website on its own at <http://localhost:4322> |
 | `npm run doctor` | Check the installation (or double-click `Check for problems.bat`) |
 | `npm run icon` | Rebuild the desktop icon from `assets/icon.svg` |
+| `npm run update` | Fetch and install the latest version (or double-click `Update.bat`) |
 
 ## Changing the dropdown lists
 

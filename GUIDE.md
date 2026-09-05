@@ -177,6 +177,10 @@ visitor can ask for everything with rhubarb in it.
 
 - **Nothing is deleted for good.** Deleted recipes go to `library/.trash`.
   Discarded photos go to `library/inbox/.discarded`.
+- **Updating never touches your recipes or photos.** If a line appears at the
+  bottom of the sidebar saying a newer version is available, close the Studio
+  and double-click **Update** in the project folder. It takes a minute and
+  leaves everything you have written exactly as it was.
 - **Photo edits never change the original.**
 - **Everything is on your computer**, in ordinary folders. The recipes are
   plain text files you could open in Notepad.

@@ -3,7 +3,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, LIBRARY_DIR, RECIPES_DIR, INBOX_DIR } from '../studio/lib/paths.js';
+import { ROOT, LIBRARY_DIR, RECIPES_DIR, INBOX_DIR, pathBudget } from '../studio/lib/paths.js';
 
 const results = [];
 const check = (label, ok, failDetail = '', okDetail = '') =>
@@ -36,12 +36,13 @@ try {
   check('Photo previews work', fs.existsSync(out) && fs.statSync(out).size > 0,
     'thumbnails could not be written');
 
-  const longest = path.join(LIBRARY_DIR, '.cache', 'thumbs', 'x'.repeat(20));
-  const room = 260 - longest.length;
-  check('Folder path is short enough', room > 40,
-    `the project folder is too deeply nested (${longest.length} of 260 characters used) — ` +
-    'move it somewhere shorter, such as Documents\\emma-cooking-blogg',
-    `${longest.length} of 260 characters used`);
+  // The cache path is not the worst case — a recipe photo sits far deeper.
+  const budget = pathBudget();
+  check('Folder path is short enough', budget.ok,
+    `this folder is ${budget.root} characters deep, and saving a recipe photo would need ` +
+    `${budget.deepest} of the ${budget.limit} Windows allows. Move the project to ` +
+    'Documents\\emma-cooking-blogg, or double-click Update.bat, which moves it for you',
+    `${budget.deepest} of ${budget.limit} characters at its deepest`);
 } catch (err) {
   check('Photo previews work', false, err.message);
 } finally {
