@@ -172,6 +172,21 @@ verifies every file arrived, and re-points the desktop icon. **It never deletes
 anything** — it prints where the old folder is so you can remove it yourself
 once the Studio starts cleanly from the icon.
 
+Libraries are always **merged, never swapped**. If `Documents\emma-cooking-blogg`
+already exists when the updater or the setup runs from another folder, that
+copy's program files are refreshed and the other folder's recipes and photos
+are added to it. Every earlier copy that setup finds is brought across, not
+just the fullest. Where the same file exists in two versions the newer is
+used and the other is kept under `library\.recovered`.
+
+## If recipes go missing
+
+Double-click **`Find my recipes.bat`** in the Studio's folder (the one the
+desktop icon opens). It searches Documents, Downloads and the Desktop for every
+other copy of the Studio and merges their recipes and photos into this one,
+with the same never-delete rules. Or download the ZIP again and run
+**Set up on this PC**, which does the same as part of setting up.
+
 It refuses to run while the Studio is open, and a failed or interrupted
 download leaves the installation untouched.
 

@@ -72,6 +72,21 @@ try {
   check('Photo cut-out tool', false, `could not load it: ${err.message}`);
 }
 
+// Recipes have a way of ending up in an older unzipped download, because
+// every fresh download starts with an empty library. Say so, and say what
+// brings them in, rather than leaving "where did my recipes go" to be
+// worked out.
+try {
+  const { otherCopiesWithRecipes } = await import('./update.js');
+  const others = otherCopiesWithRecipes(ROOT);
+  const total = others.reduce((n, o) => n + o.files, 0);
+  check('Recipes all in this copy', others.length === 0,
+    `${total} recipe and photo file${total === 1 ? '' : 's'} found in ${others.length} other ${others.length === 1 ? 'copy' : 'copies'} `
+    + `(${others.map((o) => o.dir).join('; ')}). Double-click "Find my recipes" to bring them into this one`);
+} catch (err) {
+  check('Recipes all in this copy', true, '', `could not look: ${err.message}`);
+}
+
 const recipes = fs.existsSync(RECIPES_DIR)
   ? fs.readdirSync(RECIPES_DIR).filter((d) => !d.startsWith('.')).length
   : 0;

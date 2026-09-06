@@ -14,7 +14,8 @@
     "doctor": "node scripts/doctor.js",
     "icon": "node scripts/make-icon.js",
     "update": "node scripts/update.js",
-    "key": "node scripts/setup-key.js"
+    "key": "node scripts/setup-key.js",
+    "gather": "node scripts/update.js --gather"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

@@ -3,7 +3,9 @@
 
    Two rules govern everything below:
      1. Recipes and photos are never moved, altered or deleted. The library is
-        copied, never cut, and always verified afterwards.
+        copied, never cut, and always verified afterwards. Two copies of the
+        library are merged, never one dropped for the other; where the same
+        file differs, the newer is used and the other is kept beside it.
      2. Nothing is changed on disk until the new version has been downloaded,
         unpacked and checked. A failure part-way leaves the install as it was. */
 
@@ -106,9 +108,14 @@ function likelyPlaces() {
  * under the usual folders. Used by first-time setup to find the photos and
  * recipes already on the machine.
  */
-function findInstalls(exclude = []) {
+function findInstalls(exclude = [], alsoConsider = []) {
   const skip = new Set(exclude.map((p) => path.resolve(p)));
   const found = new Map();
+  for (const dir of alsoConsider) {
+    if (isProject(dir) && fs.existsSync(path.join(dir, 'library')) && !skip.has(path.resolve(dir))) {
+      found.set(path.resolve(dir), libraryFileCount(dir));
+    }
+  }
   const walk = (dir, depth) => {
     if (depth > 3) return;
     let entries;
@@ -294,7 +301,12 @@ function mergeConfig(fresh, target, notes) {
  * too-deep relocation and first-time setup, which are the same operation.
  */
 function installFresh(source, target, dataFrom, notes) {
-  if (path.resolve(source) !== path.resolve(target)) {
+  const wasInstall = isProject(target);
+  if (wasInstall) {
+    // Someone's recipes may already live here. Refresh its program files and
+    // merge into its library; never clear it out and start again.
+    replaceCode(source, target, notes);
+  } else if (path.resolve(source) !== path.resolve(target)) {
     fs.rmSync(target, { recursive: true, force: true });
     fs.mkdirSync(target, { recursive: true });
     for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
@@ -303,10 +315,11 @@ function installFresh(source, target, dataFrom, notes) {
       const to = path.join(target, entry.name);
       if (entry.isDirectory()) copyTree(from, to); else fs.copyFileSync(from, to);
     }
+    fs.rmSync(path.join(target, 'library', '.cache'), { recursive: true, force: true });
   }
   let carried = null;
   if (dataFrom && path.resolve(dataFrom) !== path.resolve(target)) {
-    carried = carryUserDataAcross(dataFrom, target);
+    carried = carryUserDataAcross(dataFrom, target, { preferOldConfig: !wasInstall });
     // the library's own README is not the person's data; keep the newest one
     const readme = path.join(source, 'library', 'README.md');
     if (fs.existsSync(readme)) fs.copyFileSync(readme, path.join(target, 'library', 'README.md'));
@@ -315,21 +328,87 @@ function installFresh(source, target, dataFrom, notes) {
   return carried;
 }
 
-/** Copy recipes, photos and settings into a fresh install, then prove it. */
-function carryUserDataAcross(oldRoot, newRoot) {
-  for (const name of ['library', '.env']) {
-    const from = path.join(oldRoot, name);
-    if (!fs.existsSync(from)) continue;
-    const to = path.join(newRoot, name);
-    fs.rmSync(to, { recursive: true, force: true });
-    if (fs.statSync(from).isDirectory()) copyTree(from, to);
-    else fs.copyFileSync(from, to);
+/* The parts of library/ that are a person's own work. Not .cache (thumbnails,
+   dish masks, the 170 MB cut-out model — all remade on demand) and not
+   .trash (things they chose to remove). */
+const LIBRARY_WORK = ['recipes', 'inbox', 'backgrounds'];
+
+const sameBytes = (a, b) =>
+  fs.statSync(a).size === fs.statSync(b).size && fs.readFileSync(a).equals(fs.readFileSync(b));
+
+function copyFileKeepingTime(from, to) {
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  fs.copyFileSync(from, to);
+  const { atime, mtime } = fs.statSync(from);
+  fs.utimesSync(to, atime, mtime);
+}
+
+/**
+ * Bring one library's recipes and photos into another without losing a
+ * single file from either. A file only in the source is copied. A file in
+ * both and identical is left. A file in both and different: the newer one
+ * is used, and the other is kept under library/.recovered, named for where
+ * it came from, so nothing is ever overwritten out of existence.
+ *
+ * Afterwards every source file is proven to be byte-identical either in
+ * place or in .recovered, or the whole run stops.
+ */
+function mergeLibrary(fromRoot, toRoot, label) {
+  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '.');
+  const recovered = path.join(toRoot, 'library', '.recovered', `${stamp} from ${label}`);
+  const tally = { copied: 0, same: 0, replaced: 0, kept: 0, bytes: 0, recovered };
+  const check = [];
+
+  for (const sub of LIBRARY_WORK) {
+    const from = path.join(fromRoot, 'library', sub);
+    for (const [rel, size] of treeStats(from)) {
+      if (rel.endsWith('.gitkeep')) continue;
+      const src = path.join(from, rel);
+      const dst = path.join(toRoot, 'library', sub, rel);
+      const aside = path.join(recovered, sub, rel);
+      if (!fs.existsSync(dst)) {
+        copyFileKeepingTime(src, dst);
+        tally.copied += 1;
+        tally.bytes += size;
+      } else if (sameBytes(src, dst)) {
+        tally.same += 1;
+      } else if (fs.statSync(src).mtimeMs > fs.statSync(dst).mtimeMs) {
+        copyFileKeepingTime(dst, aside);      // the older one, out of the way but kept
+        copyFileKeepingTime(src, dst);
+        tally.replaced += 1;
+        tally.kept += 1;
+      } else {
+        copyFileKeepingTime(src, aside);      // the newer one is already in place
+        tally.kept += 1;
+      }
+      check.push([src, dst, aside]);
+    }
   }
-  // library/.cache holds thumbnails, dish masks and the 170 MB cut-out model:
-  // all of it is remade on demand, none of it is hers. Leave it behind rather
-  // than double the copy for nothing. (The check below compares what is
-  // left, so it is dropped from both sides.)
-  fs.rmSync(path.join(newRoot, 'library', '.cache'), { recursive: true, force: true });
+
+  for (const [src, dst, aside] of check) {
+    const inPlace = fs.existsSync(dst) && sameBytes(src, dst);
+    const setAside = fs.existsSync(aside) && sameBytes(src, aside);
+    if (!inPlace && !setAside) {
+      stop(`The copy could not be verified (${path.relative(fromRoot, src)} did not arrive intact). `
+         + `Your folder at ${fromRoot} has not been touched — use it and tell whoever set this up.`);
+    }
+  }
+  return tally;
+}
+
+/**
+ * Copy recipes, photos and settings from one install into another, then
+ * prove it. The library is merged (see mergeLibrary); .env and config are
+ * taken only where the destination has none of its own, unless
+ * preferOldConfig says the old copy's settings should win — the case when
+ * the destination was laid down fresh a moment ago and only has defaults.
+ */
+function carryUserDataAcross(oldRoot, newRoot, { preferOldConfig = false } = {}) {
+  const carried = mergeLibrary(oldRoot, newRoot, path.basename(oldRoot));
+
+  const oldEnv = path.join(oldRoot, '.env');
+  const newEnv = path.join(newRoot, '.env');
+  if (fs.existsSync(oldEnv) && !fs.existsSync(newEnv)) fs.copyFileSync(oldEnv, newEnv);
 
   // The person's own settings win over the shipped defaults. mergeConfig(),
   // run afterwards by the caller, then offers any changed upstream file as
@@ -338,21 +417,20 @@ function carryUserDataAcross(oldRoot, newRoot) {
   if (fs.existsSync(oldConfig)) {
     fs.mkdirSync(path.join(newRoot, 'config'), { recursive: true });
     for (const entry of fs.readdirSync(oldConfig, { withFileTypes: true })) {
-      if (entry.isFile() && !entry.name.endsWith('.new')) {
-        fs.copyFileSync(path.join(oldConfig, entry.name), path.join(newRoot, 'config', entry.name));
-      }
+      if (!entry.isFile() || entry.name.endsWith('.new')) continue;
+      const to = path.join(newRoot, 'config', entry.name);
+      if (preferOldConfig || !fs.existsSync(to)) fs.copyFileSync(path.join(oldConfig, entry.name), to);
     }
   }
+  return carried;
+}
 
-  const notCache = (list) => list.filter(([rel]) => !rel.split(/[\\/]/).includes('.cache'));
-  const before = notCache(treeStats(path.join(oldRoot, 'library')));
-  const after = notCache(treeStats(path.join(newRoot, 'library')));
-  const bytes = (list) => list.reduce((sum, [, size]) => sum + size, 0);
-  if (before.length !== after.length || bytes(before) !== bytes(after)) {
-    stop(`The copy could not be verified (${before.length} files in, ${after.length} out). `
-       + `Your original folder at ${oldRoot} has not been touched — use it and tell whoever set this up.`);
-  }
-  return { files: before.length, bytes: bytes(before) };
+/** One line a person can read about what a merge did. */
+function describeCarry(tally) {
+  const parts = [`${tally.copied} file${tally.copied === 1 ? '' : 's'} brought across`];
+  if (tally.same) parts.push(`${tally.same} already there`);
+  if (tally.replaced) parts.push(`${tally.replaced} newer version${tally.replaced === 1 ? '' : 's'} used`);
+  return `${parts.join(', ')} (${(tally.bytes / 1048576).toFixed(1)} MB), every one checked.`;
 }
 
 /* ------------------------------------------------------------------ main */
@@ -383,6 +461,7 @@ async function main() {
 
   const source = updateSource(projectRoot);
   if (process.argv.includes('--setup')) return firstTimeSetup(projectRoot, source);
+  if (process.argv.includes('--gather')) return gatherRecipes(projectRoot);
 
   const statePath = path.join(projectRoot, STATE_FILE);
   const state = readJson(statePath, {});
@@ -423,10 +502,15 @@ async function main() {
       target = path.join(documentsDir(), 'emma-cooking-blogg');
       let n = 2;
       while (fs.existsSync(target) && !isProject(target)) target = path.join(documentsDir(), `emma-cooking-blogg-${n++}`);
-      detail(`Setting up a fresh copy at ${target}`);
+      if (isProject(target)) {
+        detail(`There is already a copy at ${target}. Updating it and adding this folder's recipes and photos to it.`);
+      } else {
+        detail(`Setting up a fresh copy at ${target}`);
+      }
 
       const carried = installFresh(fresh, target, projectRoot, notes);
-      detail(`Copied ${carried.files} files (${(carried.bytes / 1048576).toFixed(1)} MB) of recipes and photos, and checked every one arrived.`);
+      detail(describeCarry(carried));
+      if (carried.kept) notes.push(recoveredNote(carried));
       movedFrom = projectRoot;
     } else {
       step('Installing the new version...');
@@ -456,33 +540,37 @@ async function firstTimeSetup(here, source) {
   step(`Recipe Studio will live at:  ${target}`);
 
   const targetIsInstall = isProject(target) && path.resolve(target) !== path.resolve(here);
-  const others = findInstalls([here, target]);
-  const withData = others.filter((o) => o.files > 0);
 
-  let movedFrom = null;
+  // Every copy on the machine with recipes or photos in it — the folder this
+  // runs from included, since a download that has been used for a while is
+  // exactly where the newest recipes are. All of them are brought across;
+  // none is chosen over another.
+  const copies = findInstalls([target], [here]).filter((o) => o.files > 0);
+
   if (targetIsInstall) {
     // Already set up there: refresh its program files, keep its library.
     step('There is already a copy there. Updating it and keeping its recipes and photos.');
     replaceCode(here, target, notes);
-    if (withData.length) {
-      notes.push(`Another copy with ${withData[0].files} files was also found at ${withData[0].dir} — it was left alone.`);
-    }
   } else {
-    const from = withData[0] || null;
-    if (from) {
-      step(`Found your earlier copy, with ${from.files} recipe and photo files:`);
-      detail(from.dir);
-      if (withData.length > 1) {
-        detail(`(${withData.length - 1} other copies found with fewer files; the fullest one is used.)`);
-      }
-    } else {
-      step('No earlier copy with recipes or photos was found, so this is a clean start.');
-    }
-    const carried = installFresh(here, target, from?.dir, notes);
-    if (carried) {
-      detail(`Copied ${carried.files} files (${(carried.bytes / 1048576).toFixed(1)} MB) and checked every one arrived.`);
-      movedFrom = from.dir;
-    }
+    installFresh(here, target, null, notes);  // this folder's own library comes with it
+  }
+
+  const movedFrom = [];
+  const toMerge = copies.filter((c) => targetIsInstall || path.resolve(c.dir) !== path.resolve(here));
+  if (toMerge.length) {
+    step(toMerge.length === 1
+      ? `Found your earlier copy, with ${toMerge[0].files} recipe and photo files:`
+      : `Found ${toMerge.length} earlier copies with recipes and photos. Bringing all of them across:`);
+    toMerge.forEach((copy, i) => {
+      detail(copy.dir);
+      const carried = carryUserDataAcross(copy.dir, target, { preferOldConfig: !targetIsInstall && i === 0 });
+      detail(`  ${describeCarry(carried)}`);
+      if (carried.kept) notes.push(recoveredNote(carried));
+      movedFrom.push(copy.dir);
+    });
+    mergeConfig(here, target, notes);
+  } else if (!targetIsInstall) {
+    step('No earlier copy with recipes or photos was found, so this is a clean start.');
   }
 
   // A downloaded copy carries no history, so the first update check must not
@@ -491,6 +579,42 @@ async function firstTimeSetup(here, source) {
   try { etag = (await fetchRelease(source, null)).etag || ''; } catch { /* offline is fine */ }
 
   await finishInstall(target, etag, source.branch, notes, movedFrom, { offerKey: true });
+}
+
+function recoveredNote(tally) {
+  return `${tally.kept} file${tally.kept === 1 ? ' was' : 's were'} found in two different versions. `
+       + `The newer is in use; the other is kept in library${path.sep}.recovered${path.sep}${path.basename(tally.recovered)} in case it is wanted.`;
+}
+
+/**
+ * "Find my recipes": look through the usual folders for every other copy of
+ * Recipe Studio and bring its recipes and photos into this one. For the day
+ * a recipe seems to have vanished — it is almost always sitting in an older
+ * unzipped download. Nothing is fetched, nothing is deleted.
+ */
+async function gatherRecipes(here) {
+  step(`Looking for recipes and photos in other copies, to bring into:  ${here}`);
+  const copies = findInstalls([here]).filter((o) => o.files > 0);
+  if (!copies.length) {
+    step('No other copy with recipes or photos was found in Documents, Downloads or the Desktop.');
+    detail('If one is somewhere else, move it into Downloads and run this again.');
+    say();
+    return;
+  }
+  const notes = [];
+  step(`Found ${copies.length} ${copies.length === 1 ? 'copy' : 'copies'}:`);
+  for (const copy of copies) {
+    detail(copy.dir);
+    const carried = mergeLibrary(copy.dir, here, path.basename(copy.dir));
+    detail(`  ${describeCarry(carried)}`);
+    if (carried.kept) notes.push(recoveredNote(carried));
+  }
+  say();
+  say('  Done. Start the Studio from the desktop icon; everything found is in it now.');
+  say('  The other folders were not changed. Once the Studio shows every recipe,');
+  say('  they can be dragged to the Recycle Bin.');
+  for (const note of notes) detail(note);
+  say();
 }
 
 /**
@@ -566,14 +690,44 @@ async function finishInstall(target, etag, branch, notes, movedFrom, { offerKey 
     say('  what it says, then double-click "Check for problems" again.');
   }
   for (const note of notes) detail(note);
-  if (movedFrom) {
+  const olds = [].concat(movedFrom || []).filter(Boolean);
+  if (olds.length) {
     say();
     say(`  Recipe Studio now lives in:  ${target}`);
-    say(`  The old folder is still at:  ${movedFrom}`);
-    say('  Nothing was deleted. Once the Studio works from the icon, that old');
-    say('  folder can be dragged to the Recycle Bin.');
+    if (olds.length === 1) {
+      say(`  The old folder is still at:  ${olds[0]}`);
+      say('  Nothing was deleted. Once the Studio works from the icon, that old');
+      say('  folder can be dragged to the Recycle Bin.');
+    } else {
+      say('  The old folders are still at:');
+      for (const dir of olds) say(`    ${dir}`);
+      say('  Nothing was deleted. Once the Studio works from the icon and shows');
+      say('  every recipe, those old folders can be dragged to the Recycle Bin.');
+    }
   }
   say();
+}
+
+/**
+ * Used by the doctor to say when recipes are sitting in another copy. Only
+ * files this copy does not already hold count, so an old folder that has
+ * been gathered from (and not yet thrown away) stops being reported.
+ */
+export function otherCopiesWithRecipes(projectRoot = ROOT) {
+  return findInstalls([projectRoot])
+    .map((o) => {
+      let missing = 0;
+      for (const sub of LIBRARY_WORK) {
+        const from = path.join(o.dir, 'library', sub);
+        for (const [rel] of treeStats(from)) {
+          if (rel.endsWith('.gitkeep')) continue;
+          const here = path.join(projectRoot, 'library', sub, rel);
+          if (!fs.existsSync(here) || !sameBytes(path.join(from, rel), here)) missing += 1;
+        }
+      }
+      return { ...o, files: missing };
+    })
+    .filter((o) => o.files > 0);
 }
 
 /** Used by the Studio at startup to show a quiet "newer version" note. */

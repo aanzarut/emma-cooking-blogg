@@ -8,6 +8,7 @@ dist/
 # Working files the Studio creates
 library/.cache/
 library/.trash/
+library/.recovered/
 library/inbox/.discarded/
 library/inbox/.heic-originals/
 .update-state.json

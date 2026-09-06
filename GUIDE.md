@@ -224,3 +224,11 @@ visitor can ask for everything with rhubarb in it.
   angle. Take a better one, file it, and press Read again.
 - **A recipe isn't on the website** — its status probably isn't Ready, or the
   site hasn't been rebuilt since you changed it.
+- **Recipes or photos have gone missing** — they are almost certainly still
+  on the computer, in an older copy of the Studio (every fresh download
+  starts with an empty library, so work done in one unzipped folder stays in
+  that folder). Close the Studio and double-click **Find my recipes** in the
+  Studio's folder. It looks through Documents, Downloads and the Desktop for
+  every other copy and brings their recipes and photos into this one. Nothing
+  is deleted, and if the same recipe was changed in two places the newer one
+  is used and the other is kept in `library/.recovered`.
