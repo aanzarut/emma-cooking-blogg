@@ -7,7 +7,7 @@ import MarkdownIt from 'markdown-it';
 
 import { ROOT, DIST_DIR, SITE_DIR, recipePaths, ensureDir } from '../studio/lib/paths.js';
 import { listRecipes } from '../studio/lib/recipes.js';
-import { renderEdit, mergeEdit, kindOf, WEB_SIZES } from '../studio/lib/images.js';
+import { renderEdit, mergeEdit, needsCutout, kindOf, WEB_SIZES } from '../studio/lib/images.js';
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
 const site = JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'site.json'), 'utf8'));
@@ -39,13 +39,24 @@ async function exportImages(recipe) {
   for (const name of ordered) {
     const stem = path.basename(name, path.extname(name));
     const edit = mergeEdit(edits[name] || {});
+    // A background edit needs the dish cut out, which only the Studio on her
+    // PC can do (the model lives there, not on GitHub's build machines). The
+    // Studio saved the finished picture in images/edited when she pressed
+    // Save, so a build resizes that copy instead of starting again.
+    const edited = path.join(p.edited, name);
+    const useEdited = needsCutout(edit) && fs.existsSync(edited);
     const variants = {};
     for (const size of WEB_SIZES) {
       const file = `${stem}-${size.name}.jpg`;
-      const buffer = await renderEdit(path.join(p.originals, name), edit, {
-        maxWidth: size.width,
-        quality: size.quality,
-      });
+      const buffer = useEdited
+        ? await renderEdit(edited, {}, { maxWidth: size.width, quality: size.quality })
+        : await renderEdit(path.join(p.originals, name), edit, {
+          maxWidth: size.width,
+          quality: size.quality,
+          // Only reached for a background edit whose saved copy has gone
+          // missing; better a photo without its background than no website.
+          onIssue: (why) => console.warn(`  ${name}: built without its background (${why})`),
+        });
       fs.writeFileSync(path.join(outDir, file), buffer);
       variants[size.name] = `/photos/${recipe.slug}/${file}`;
     }

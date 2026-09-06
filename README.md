@@ -48,6 +48,7 @@ library/
       images/original/       untouched dish photos
       images/edited/         touched-up copies (originals are never altered)
       edits.json             the sliders used for each photo, so any edit can be undone
+  backgrounds/               pictures she has added to put behind a cut-out dish
 
 config/
   site.json                  website name, tagline, web address

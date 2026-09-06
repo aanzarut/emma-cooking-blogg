@@ -59,6 +59,19 @@ const hasKey = hasEnv && /^\s*ANTHROPIC_API_KEY\s*=\s*\S/m.test(fs.readFileSync(
 check('Recipe reading configured', hasKey,
   'optional — copy .env.example to .env and add a key to switch it on');
 
+// The cut-out model behind the photo editor's Background tool. Absent is
+// not a fault — it is fetched the first time a background is chosen — so
+// this line is informational either way.
+try {
+  const { modelPath, modelPresent, MODEL } = await import('../studio/lib/cutout.js');
+  const present = modelPresent();
+  const mb = present ? `${Math.round(fs.statSync(modelPath()).size / 1048576)} MB` : '';
+  check('Photo cut-out tool', true, '',
+    present ? `${MODEL.file}, ${mb}` : 'not fetched yet — happens the first time a Background is chosen');
+} catch (err) {
+  check('Photo cut-out tool', false, `could not load it: ${err.message}`);
+}
+
 const recipes = fs.existsSync(RECIPES_DIR)
   ? fs.readdirSync(RECIPES_DIR).filter((d) => !d.startsWith('.')).length
   : 0;

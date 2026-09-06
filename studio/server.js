@@ -12,6 +12,8 @@ import { createRouter, sendJson, sendFile, sendText, readJsonBody } from './lib/
 import * as store from './lib/recipes.js';
 import * as images from './lib/images.js';
 import * as inbox from './lib/inbox.js';
+import * as cutout from './lib/cutout.js';
+import * as backgrounds from './lib/backgrounds.js';
 import * as ai from './lib/transcribe.js';
 import { checkForUpdate } from '../scripts/update.js';
 
@@ -70,6 +72,7 @@ router.get('/api/bootstrap', async (_req, res) => {
       }, {}),
     },
     ai: { available: ai.isAvailable(), model: ai.DEFAULT_MODEL },
+    cutout: cutout.status(),
     update: updateStatus,
     uploadUrl: `${lanAddress()}/upload`,
     previewUrl: `http://localhost:${PREVIEW_PORT}/`,
@@ -262,32 +265,95 @@ router.post('/api/recipes/:slug/photos/:name/edit', async (req, res, { params })
     const edit = images.mergeEdit(body.edit || {});
     const edits = loadEdits(params.slug);
 
+    let warning = '';
     if (images.isIdentityEdit(edit)) {
       delete edits[params.name];
       fs.rmSync(path.join(p.edited, params.name), { force: true });
     } else {
       edits[params.name] = edit;
-      await images.renderEditToFile(source, edit, path.join(p.edited, params.name), { quality: 92 });
+      await images.renderEditToFile(source, edit, path.join(p.edited, params.name), {
+        quality: 92,
+        onIssue: (why) => { warning = `Saved without the background: ${why}`; },
+      });
     }
     saveEdits(params.slug, edits);
-    sendJson(res, 200, { photos: photoList(params.slug) });
+    sendJson(res, 200, { photos: photoList(params.slug), warning });
   } catch (err) { fail(res, err, 500); }
 });
 
-router.get('/api/recipes/:slug/photos/:name/geometry', async (_req, res, { params, query }) => {
+/* The editor's live picture: the photo turned and, if asked, with its new
+   background. The first time a background is asked for on a photo, this is
+   what computes the dish mask — so the request can take a few seconds. If
+   the cut-out is not available the plain photo comes back, with the reason
+   in a header the editor shows as a note. */
+async function sendPreview(res, { params, query }) {
   try {
     const source = safeJoin(recipePaths(params.slug).originals, params.name);
     if (!fs.existsSync(source)) return sendText(res, 404, 'Not found');
     let edit = {};
     try { edit = JSON.parse(query.get('edit') || '{}'); } catch { edit = {}; }
-    const buffer = await images.renderGeometry(source, edit);
+    let note = '';
+    const buffer = await images.renderPreview(source, edit, { onIssue: (why) => { note = why; } });
     res.writeHead(200, {
       'content-type': 'image/jpeg',
       'content-length': buffer.length,
       'cache-control': 'no-store',
+      ...(note ? { 'x-studio-note': encodeURIComponent(note) } : {}),
     });
     res.end(buffer);
   } catch (err) { sendText(res, 500, err.message); }
+}
+router.get('/api/recipes/:slug/photos/:name/preview', async (_req, res, ctx) => sendPreview(res, ctx));
+router.get('/api/recipes/:slug/photos/:name/geometry', async (_req, res, ctx) => sendPreview(res, ctx));
+
+/* ---------------------------------------------------------------- cut-out */
+
+router.get('/api/cutout/status', async (_req, res) => {
+  sendJson(res, 200, cutout.status());
+});
+
+/* Starts the one-time model download and answers at once; the editor polls
+   the status for progress. A second press while it runs joins the first. */
+router.post('/api/cutout/model', async (_req, res) => {
+  cutout.ensureModel().catch(() => { /* reported through status().error */ });
+  sendJson(res, 202, cutout.status());
+});
+
+/* ------------------------------------------------------------ backgrounds */
+
+router.get('/api/backgrounds', async (_req, res) => {
+  sendJson(res, 200, { backgrounds: backgrounds.listBackgrounds() });
+});
+
+router.post('/api/backgrounds', async (req, res) => {
+  try {
+    const added = await backgrounds.receiveBackground(req);
+    sendJson(res, 200, { added, backgrounds: backgrounds.listBackgrounds() });
+  } catch (err) { fail(res, err); }
+});
+
+router.delete('/api/backgrounds/:name', async (_req, res, { params }) => {
+  try {
+    backgrounds.deleteBackground(params.name);
+    sendJson(res, 200, { backgrounds: backgrounds.listBackgrounds() });
+  } catch (err) { fail(res, err); }
+});
+
+/* A background picture, full size or as a thumbnail (?w=). */
+router.get('/backgrounds/:name', async (_req, res, { params, query }) => {
+  try {
+    const file = backgrounds.resolveBackground(params.name);
+    if (!file) return sendText(res, 404, 'Not found');
+    const width = Number(query.get('w'));
+    if (width) {
+      try {
+        return sendFile(res, await images.thumbnail(file, Math.min(2000, Math.max(80, width))), { cache: 'private, max-age=60' });
+      } catch (err) {
+        console.warn(`  Could not make a thumbnail for ${path.basename(file)}: ${err.message}`);
+      }
+    }
+    sendFile(res, file, { cache: 'private, max-age=60' });
+  } catch (err) { sendText(res, 400, err.message); }
 });
 
 router.delete('/api/recipes/:slug/photos/:name', async (_req, res, { params }) => {

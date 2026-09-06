@@ -373,3 +373,27 @@ pre.log { background: #1f272f; color: #d6e0ea; padding: 14px; border-radius: 9px
 }
 .viewer-arrow:hover { background: rgba(255,255,255,.18); }
 @media (max-width: 640px) { .viewer-arrow { width: 36px; font-size: 24px; } }
+
+/* --- background picker in the photo editor --- */
+.stage-note {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  max-width: calc(100% - 36px); padding: 8px 14px; border-radius: 999px;
+  background: rgba(255,255,255,.94); color: var(--ink); font-size: 13px;
+  display: flex; gap: 8px; align-items: center; box-shadow: 0 4px 16px rgba(0,0,0,.25);
+}
+.stage-note.warn { background: var(--warn-soft); color: var(--warn); }
+.stage-note.bad { background: var(--danger-soft); color: var(--danger); }
+.bg-picker { margin-bottom: 12px; }
+.bg-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.bg-tile {
+  position: relative; aspect-ratio: 1; padding: 0; border: 2px solid transparent; border-radius: 8px;
+  overflow: hidden; background: #e5e0d9; cursor: pointer; font: inherit;
+}
+.bg-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bg-tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px #fff inset; }
+.bg-tile.add { display: grid; place-items: center; align-content: center; color: var(--ink-soft); font-size: 20px; line-height: 1; border-style: dashed; border-color: #cfc8bf; }
+.bg-tile.add small { font-size: 10px; margin-top: 2px; }
+.bg-tile .x {
+  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: rgba(0,0,0,.55); color: #fff; font-size: 13px; line-height: 18px; text-align: center;
+}

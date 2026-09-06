@@ -19,7 +19,7 @@ import { ROOT, pathBudget } from '../studio/lib/paths.js';
 
 // Folders and files the update replaces. Everything else is left alone.
 const CODE_DIRS = ['studio', 'site', 'scripts', 'assets', '.github'];
-const CODE_FILE_PATTERN = /^(package\.json|package-lock\.json|\.gitignore|\.env\.example|.*\.md|.*\.bat|.*\.sh)$/i;
+const CODE_FILE_PATTERN = /^(package\.json|package-lock\.json|\.gitignore|\.npmrc|\.env\.example|.*\.md|.*\.bat|.*\.sh)$/i;
 
 // Never touched, in either direction, for any reason.
 const SACRED = new Set(['library', '.env', 'node_modules', 'dist', '.git']);
@@ -325,6 +325,11 @@ function carryUserDataAcross(oldRoot, newRoot) {
     if (fs.statSync(from).isDirectory()) copyTree(from, to);
     else fs.copyFileSync(from, to);
   }
+  // library/.cache holds thumbnails, dish masks and the 170 MB cut-out model:
+  // all of it is remade on demand, none of it is hers. Leave it behind rather
+  // than double the copy for nothing. (The check below compares what is
+  // left, so it is dropped from both sides.)
+  fs.rmSync(path.join(newRoot, 'library', '.cache'), { recursive: true, force: true });
 
   // The person's own settings win over the shipped defaults. mergeConfig(),
   // run afterwards by the caller, then offers any changed upstream file as
@@ -339,8 +344,9 @@ function carryUserDataAcross(oldRoot, newRoot) {
     }
   }
 
-  const before = treeStats(path.join(oldRoot, 'library'));
-  const after = treeStats(path.join(newRoot, 'library'));
+  const notCache = (list) => list.filter(([rel]) => !rel.split(/[\\/]/).includes('.cache'));
+  const before = notCache(treeStats(path.join(oldRoot, 'library')));
+  const after = notCache(treeStats(path.join(newRoot, 'library')));
   const bytes = (list) => list.reduce((sum, [, size]) => sum + size, 0);
   if (before.length !== after.length || bytes(before) !== bytes(after)) {
     stop(`The copy could not be verified (${before.length} files in, ${after.length} out). `

@@ -879,28 +879,44 @@ const ADJUSTMENTS = [
   { key: 'straighten', label: 'Straighten', min: -15, max: 15, step: 0.5, base: 0 },
 ];
 
+const BACKGROUND_CHOICES = [
+  ['none', 'Keep'], ['black', 'Black'], ['white', 'White'], ['picture', 'Picture…'], ['pop', 'Colour pop'],
+];
+
+const freshEdit = () => ({
+  rotate: 0, straighten: 0, flipH: false, crop: null,
+  background: { mode: 'none', picture: '', feather: 6 }, mono: false,
+  brightness: 1, contrast: 1, saturation: 1, warmth: 0, sharpen: 0, autoLevels: false,
+});
+
 function viewPhotoEditor() {
   const photo = state.photos.find((p) => p.name === state.editing);
   if (!photo) { state.editing = null; return render(); }
 
-  const edit = {
-    rotate: 0, straighten: 0, flipH: false, crop: null,
-    brightness: 1, contrast: 1, saturation: 1, warmth: 0, sharpen: 0, autoLevels: false,
-    ...(photo.edit || {}),
-  };
+  const saved = photo.edit || {};
+  const edit = { ...freshEdit(), ...saved, background: { ...freshEdit().background, ...(saved.background || {}) } };
   let cropping = Boolean(edit.crop);
   let aspect = 'free';
 
-  const base = `/api/recipes/${state.recipe.slug}/photos/${encodeURIComponent(photo.name)}/geometry`;
-  const geometryUrl = () =>
-    `${base}?edit=${encodeURIComponent(JSON.stringify({ rotate: edit.rotate, straighten: edit.straighten, flipH: edit.flipH }))}`;
+  const base = `/api/recipes/${state.recipe.slug}/photos/${encodeURIComponent(photo.name)}/preview`;
+  const previewUrl = () => {
+    const part = { rotate: edit.rotate, straighten: edit.straighten, flipH: edit.flipH, background: edit.background };
+    return `${base}?edit=${encodeURIComponent(JSON.stringify(part))}`;
+  };
 
-  const img = el('img', { src: geometryUrl(), alt: photo.name, draggable: false });
+  const img = el('img', { alt: photo.name, draggable: false });
   const cropBox = el('div', { class: 'cropbox', hidden: true },
     el('span', { class: 'handle nw', 'data-handle': 'nw' }),
     el('span', { class: 'handle se', 'data-handle': 'se' }));
   const frame = el('div', { class: 'frame' }, img, cropBox);
-  const stage = el('div', { class: 'stage' }, frame);
+  const stageNote = el('div', { class: 'stage-note', hidden: true });
+  const stage = el('div', { class: 'stage' }, frame, stageNote);
+
+  const note = (content, kind = '') => {
+    stageNote.hidden = !content;
+    stageNote.className = `stage-note${kind ? ` ${kind}` : ''}`;
+    mount(stageNote, ...(Array.isArray(content) ? content : [content]));
+  };
 
   /* --- colour preview, applied live with CSS so the sliders feel instant --- */
   const applyColour = () => {
@@ -911,11 +927,66 @@ function viewPhotoEditor() {
       edit.autoLevels ? 'contrast(1.06) brightness(1.02)' : '',
       edit.warmth > 0 ? `sepia(${edit.warmth * 1.8})` : '',
       edit.warmth < 0 ? `hue-rotate(${edit.warmth * 40}deg) saturate(1.05)` : '',
+      edit.mono ? 'grayscale(1)' : '',
     ].filter(Boolean).join(' ');
   };
 
-  /* --- turning is rendered by the server, so what you see is what you get --- */
-  const refreshGeometry = debounce(() => { img.src = geometryUrl(); }, 120);
+  /* --- turning and the background are rendered by the server, so what you
+         see is what you get. Fetched by hand rather than set as img.src so
+         the server's note (no cut-out available, say) can be read back. --- */
+  let previewSeq = 0;
+  let previewBlob = null;
+  const loadPreview = async () => {
+    const seq = ++previewSeq;
+    const cutting = edit.background.mode !== 'none';
+    if (cutting) note([el('span', { class: 'spin' }), ' Finding the dish… this takes a few seconds the first time.']);
+    try {
+      const res = await fetch(previewUrl());
+      if (seq !== previewSeq) return;             // a newer request is on its way
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      if (seq !== previewSeq) return;
+      if (previewBlob) URL.revokeObjectURL(previewBlob);
+      previewBlob = URL.createObjectURL(blob);
+      img.src = previewBlob;
+      const why = res.headers.get('x-studio-note');
+      note(why ? `Shown without the background — ${decodeURIComponent(why)}` : '', why ? 'warn' : '');
+    } catch (err) {
+      if (seq === previewSeq) note(`Could not show the preview: ${err.message}`, 'bad');
+    }
+  };
+  const refreshPreview = debounce(loadPreview, 120);
+
+  /* --- the cut-out tool itself is fetched once, the first time it is needed --- */
+  let fetchingModel = false;
+  const ensureCutout = async () => {
+    if (state.boot?.cutout?.present || fetchingModel) return;
+    fetchingModel = true;
+    try {
+      await api('/api/cutout/model', { method: 'POST' });
+      for (;;) {
+        const s = await api('/api/cutout/status');
+        if (s.present) {
+          state.boot.cutout = s;
+          note('');
+          if (edit.background.mode !== 'none') loadPreview();
+          return;
+        }
+        if (!s.downloading) {
+          note([`Could not fetch the cut-out tool: ${s.error || 'no connection'}. `,
+            el('button', { class: 'btn small', onclick: () => { fetchingModel = false; ensureCutout(); } }, 'Try again')], 'bad');
+          return;
+        }
+        const size = s.total ? `${Math.round(s.total / 1048576)} MB` : '170 MB';
+        note([el('span', { class: 'spin' }), ` Fetching the cut-out tool, once only (${size}) — ${s.percent}%`]);
+        await new Promise((r) => setTimeout(r, 800));
+      }
+    } catch (err) {
+      note(`Could not fetch the cut-out tool: ${err.message}`, 'bad');
+    } finally {
+      fetchingModel = false;
+    }
+  };
 
   /* ------------------------------------------------------------ crop box */
 
@@ -1012,7 +1083,7 @@ function viewPhotoEditor() {
       oninput: (e) => {
         edit[cfg.key] = Number(e.target.value);
         out.textContent = formatAdjust(cfg, edit[cfg.key]);
-        if (cfg.key === 'straighten') refreshGeometry(); else applyColour();
+        if (cfg.key === 'straighten') refreshPreview(); else applyColour();
       },
     });
     return el('div', { class: 'slider' }, el('div', { class: 'lbl' }, el('span', {}, cfg.label), out), input);
@@ -1021,7 +1092,7 @@ function viewPhotoEditor() {
   const turn = (degrees) => {
     edit.rotate = (edit.rotate + degrees + 360) % 360;
     if (edit.crop && degrees % 180 !== 0) edit.crop = null; // the frame changed shape
-    refreshGeometry();
+    refreshPreview();
     drawCrop();
   };
 
@@ -1054,6 +1125,87 @@ function viewPhotoEditor() {
     },
   }, '⛶ Crop');
 
+  /* ------------------------------------------------------- background */
+
+  const featherOut = el('b', {}, `${edit.background.feather} px`);
+  const featherRow = el('div', { class: 'slider', hidden: edit.background.mode === 'none' },
+    el('div', { class: 'lbl' }, el('span', {}, 'Softness of the edge'), featherOut),
+    el('input', {
+      type: 'range', min: 0, max: 30, step: 1, value: edit.background.feather,
+      oninput: (e) => { edit.background.feather = Number(e.target.value); featherOut.textContent = `${edit.background.feather} px`; },
+      onchange: () => refreshPreview(),
+    }));
+
+  const pictureGrid = el('div', { class: 'bg-grid' });
+  const picturePanel = el('div', { class: 'bg-picker', hidden: edit.background.mode !== 'picture' },
+    pictureGrid,
+    el('p', { class: 'hint' }, 'The first few come with the app. Add your own — a tablecloth, a wooden board, anything.'));
+
+  const fillPictures = async () => {
+    let list = [];
+    try { list = (await api('/api/backgrounds')).backgrounds; } catch (err) { toast(err.message, true); }
+    if (edit.background.mode === 'picture' && !list.some((b) => b.name === edit.background.picture)) {
+      edit.background.picture = list[0]?.name || '';
+    }
+    const tiles = list.map((b) => {
+      const chosen = b.name === edit.background.picture;
+      const tile = el('button', {
+        class: 'bg-tile', 'aria-pressed': String(chosen), title: b.name, type: 'button',
+        onclick: () => { edit.background.picture = b.name; fillPictures(); refreshPreview(); },
+      }, el('img', { src: `/backgrounds/${encodeURIComponent(b.name)}?w=160`, alt: b.name }));
+      if (!b.builtin) {
+        tile.append(el('span', {
+          class: 'x', title: 'Remove this picture', role: 'button',
+          onclick: async (e) => {
+            e.stopPropagation();
+            if (!(await confirmBox({ title: 'Remove this background?', message: 'Photos already saved with it keep it. It just leaves the list.', confirmLabel: 'Remove', danger: true }))) return;
+            try {
+              await api(`/api/backgrounds/${encodeURIComponent(b.name)}`, { method: 'DELETE' });
+              if (edit.background.picture === b.name) edit.background.picture = '';
+              fillPictures();
+            } catch (err) { toast(err.message, true); }
+          },
+        }, '×'));
+      }
+      return tile;
+    });
+    const picker = el('input', {
+      type: 'file', accept: 'image/*,.heic,.heif', hidden: true,
+      onchange: async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const data = new FormData();
+        data.append('picture', file, file.name);
+        toast('Adding the picture…');
+        try {
+          const res = await fetch('/api/backgrounds', { method: 'POST', body: data });
+          const body = await res.json();
+          if (!res.ok) throw new Error(body.error || 'Could not add that picture.');
+          edit.background.picture = body.added.name;
+          await fillPictures();
+          refreshPreview();
+        } catch (err) { toast(err.message, true); }
+      },
+    });
+    tiles.push(el('button', { class: 'bg-tile add', type: 'button', onclick: () => picker.click() }, '+', el('small', {}, 'Add a picture')), picker);
+    mount(pictureGrid, ...tiles);
+  };
+
+  const backgroundChips = el('div', { class: 'chips', style: { marginBottom: '12px' } },
+    ...BACKGROUND_CHOICES.map(([mode, label]) =>
+      el('button', {
+        class: 'chip', 'aria-pressed': String(edit.background.mode === mode), 'data-mode': mode, type: 'button',
+        onclick: (e) => {
+          edit.background.mode = mode;
+          [...backgroundChips.children].forEach((b) => b.setAttribute('aria-pressed', String(b === e.currentTarget)));
+          featherRow.hidden = mode === 'none';
+          picturePanel.hidden = mode !== 'picture';
+          if (mode === 'picture') fillPictures().then(() => refreshPreview());
+          else refreshPreview();
+          if (mode !== 'none') ensureCutout();
+        },
+      }, label)));
+
   mount(document.getElementById('topbar'),
     topbar('Touch up photo', photo.name,
       el('button', { class: 'btn ghost', onclick: () => { state.editing = null; render(); } }, '← Back to the recipe')));
@@ -1067,25 +1219,38 @@ function viewPhotoEditor() {
           el('div', { style: { display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' } },
             el('button', { class: 'btn small', onclick: () => turn(-90) }, '↺ Left'),
             el('button', { class: 'btn small', onclick: () => turn(90) }, '↻ Right'),
-            el('button', { class: 'btn small', onclick: () => { edit.flipH = !edit.flipH; refreshGeometry(); } }, '⇄ Flip'),
+            el('button', { class: 'btn small', onclick: () => { edit.flipH = !edit.flipH; refreshPreview(); } }, '⇄ Flip'),
             cropToggle),
           cropPanel,
+
+          el('h3', { style: { margin: '18px 0 10px' } }, 'Background'),
+          backgroundChips,
+          picturePanel,
+          featherRow,
+          el('p', { class: 'hint', style: { marginBottom: '4px' } },
+            'The dish is found automatically. Colour pop keeps the dish in colour and turns the rest grey.'),
 
           el('h3', { style: { margin: '18px 0 10px' } }, 'Adjust'),
           ...sliders,
 
-          el('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '4px 0 18px' } },
+          el('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '4px 0 8px' } },
             el('input', {
               type: 'checkbox', checked: edit.autoLevels, style: { width: 'auto' },
               onchange: (e) => { edit.autoLevels = e.target.checked; applyColour(); },
             }),
             el('span', {}, 'Auto-brighten dull photos')),
+          el('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '0 0 18px' } },
+            el('input', {
+              type: 'checkbox', checked: edit.mono, style: { width: 'auto' }, id: 'edit-mono',
+              onchange: (e) => { edit.mono = e.target.checked; applyColour(); },
+            }),
+            el('span', {}, 'Black & white')),
 
           el('div', { style: { display: 'flex', gap: '8px' } },
             el('button', {
               class: 'btn', style: { flex: '1' },
               onclick: () => {
-                Object.assign(edit, { rotate: 0, straighten: 0, flipH: false, crop: null, brightness: 1, contrast: 1, saturation: 1, warmth: 0, sharpen: 0, autoLevels: false });
+                Object.assign(edit, freshEdit());
                 render();
               },
             }, 'Start over'),
@@ -1096,6 +1261,9 @@ function viewPhotoEditor() {
   applyColour();
   img.addEventListener('load', drawCrop);
   drawCrop();
+  if (edit.background.mode === 'picture') fillPictures();
+  if (edit.background.mode !== 'none') ensureCutout();
+  loadPreview();
 }
 
 function formatAdjust(cfg, value) {
@@ -1115,7 +1283,7 @@ async function applyEdit(photo, edit) {
     state.photos = result.photos;
     state.editing = null;
     state.tab = 'photos';
-    toast('Photo saved.');
+    if (result.warning) toast(result.warning, true); else toast('Photo saved.');
     render();
   } catch (err) {
     toast(err.message, true);

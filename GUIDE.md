@@ -131,7 +131,33 @@ Press **Touch up** on any dish photo.
 - **Brightness / Contrast / Colour / Warmth / Sharpness** — drag and watch.
 - **Straighten** — for a photo that's slightly tilted.
 - **Auto-brighten dull photos** — a good first thing to try.
+- **Black & white** — the whole photo in black and white.
 - **Start over** puts everything back.
+
+### Background
+
+The Studio can find the dish in a photo and change what is behind it.
+
+- **Keep** — the photo as it was taken.
+- **Black** or **White** — a plain backdrop, the way food magazines do it.
+- **Picture…** — a picture of your choosing behind the dish. A few plain
+  textures come with the app; **Add a picture** puts one of your own on the
+  list (a tablecloth, a wooden board, a sheet of paper you photographed) and
+  it stays there for every photo after.
+- **Colour pop** — the dish stays in colour, everything around it goes grey.
+- **Softness of the edge** — how gently the dish blends into the new
+  background. Turn it up if the edge looks cut with scissors.
+
+The first time you choose a background on this PC, the Studio fetches the
+tool that finds the dish (about 170 MB, once only) and says so under the
+photo. After that, each new photo takes a few seconds the first time and is
+instant thereafter. Everything happens on this computer — no photo is sent
+anywhere.
+
+It is very good on a plate against a table, and less sure of itself on
+steam, scattered herbs, glass, or a dish that is the same colour as what it
+sits on. If part of a dish goes missing, try a little more Softness, or
+choose **Keep** — nothing is lost.
 
 Press **Save photo**. Your original is never touched — the edit is saved as a
 separate copy, so you can come back and change it or undo it whenever.

@@ -51,6 +51,14 @@ cd Documents\emma-cooking-blogg
 npm install
 ```
 
+**One more download, later.** The photo editor's *Background* tool (black,
+white, a picture of her own behind the dish, or colour pop) needs a model
+file of about 170 MB to find the dish in a photo. It is not in the download
+above: the Studio fetches it the first time she chooses a background, shows
+the progress under the photo, and keeps it in `library/.cache/models`. It
+needs the internet that once, and never again. `Check for problems` reports
+whether it is there.
+
 **Why the short path matters.** Windows refuses to write any file whose full
 path exceeds 260 characters. A ZIP downloaded from a branch carries a
 ~57-character folder name, and Explorer's *Extract All* nests it inside another
