@@ -20,6 +20,14 @@ commentary, written in Markdown.
 Anything deleted through the Studio is moved, not destroyed:
 recipes to `.trash/`, discarded photos to `inbox/.discarded/`.
 
+"Put the website online" keeps this library in step with the other computer
+through GitHub. It never deletes here either: a file the other computer
+removed goes to `.recovered/<date> deleted on the other computer/`, and a
+file changed on both computers has this computer's version kept in
+`.recovered/<date> changed on both computers/` before the other one is used.
+`.cache`, `.trash`, `.recovered` and the two hidden inbox folders stay on this
+computer; everything else in here is shared.
+
 iPhones shoot HEIC, which no browser can display. Those are converted to JPEG
 the moment they arrive, and the untouched camera file is kept in
 `inbox/.heic-originals/`. Nothing in the app reads that folder — it exists so

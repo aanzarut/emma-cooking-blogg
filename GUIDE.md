@@ -186,9 +186,18 @@ Press **Open the preview** and look at it — this opens the finished website in
 a new tab, exactly as visitors will see it. If something's wrong, go back, fix
 it, and build again.
 
-When it's right, the site goes online. The first time, whoever set this up
-needs to connect it to a web address — see PUBLISHING.md. After that it's one
-command, or ask them to do it.
+When it's right, press **Put the website online**. It sends your work to the
+recipe store, brings back anything done on the other computer, and a few
+minutes later the website has updated. The panel tells you what happened, in
+plain words, and the sidebar shows when it last went online.
+
+If the button says publishing isn't set up on this computer, whoever set this
+up needs to run **Set up website publishing** once — see PUBLISHING.md.
+
+Finish the recipe you are working on before pressing it. If the same recipe
+was changed on both computers since they were last in step, the other
+computer's version is used and yours is kept in `library/.recovered` — the
+panel names it, so nothing is lost.
 
 ---
 
@@ -213,8 +222,12 @@ visitor can ask for everything with rhubarb in it.
   ending, so it shows as just **Update**.) It takes a minute and
   leaves everything you have written exactly as it was.
 - **Photo edits never change the original.**
-- **Everything is on your computer**, in ordinary folders. The recipes are
-  plain text files you could open in Notepad.
+- **Putting the website online never deletes anything here.** If the other
+  computer removed or changed something you also changed, your copy is kept
+  in `library/.recovered`.
+- **Everything is on your computer**, in ordinary folders, and once it has
+  been put online, in the recipe store too. The recipes are plain text files
+  you could open in Notepad.
 - The app warns you if you try to leave a recipe with unsaved changes.
 
 ## When something looks wrong
@@ -222,8 +235,9 @@ visitor can ask for everything with rhubarb in it.
 - **A photo won't send from the phone** — check both are on the same wifi.
 - **The reader got it badly wrong** — the photo was probably too dark or at an
   angle. Take a better one, file it, and press Read again.
-- **A recipe isn't on the website** — its status probably isn't Ready, or the
-  site hasn't been rebuilt since you changed it.
+- **A recipe isn't on the website** — its status probably isn't Ready, or
+  **Put the website online** hasn't been pressed since you changed it. Give it
+  a few minutes after pressing.
 - **Recipes or photos have gone missing** — they are almost certainly still
   on the computer, in an older copy of the Studio (every fresh download
   starts with an empty library, so work done in one unzipped folder stays in

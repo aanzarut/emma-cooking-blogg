@@ -19,7 +19,10 @@ You should see `v20.something` or higher.
 ## 2. Get the project onto the PC
 
 1. Download the ZIP:
-   <https://github.com/aanzarut/emma-cooking-blogg/archive/refs/heads/claude/cooking-blog-asset-system-a4jxrn.zip>
+   <https://github.com/aanzarut/emma-cooking-blogg/archive/refs/heads/main.zip>
+   The repository is private, so the browser has to be signed in to GitHub as
+   an account that can see it — download it yourself, or sign in on the PC
+   once.
 2. In Downloads, right-click it → **Properties** → tick **Unblock** if it is
    offered → **OK**. Then right-click → **Extract All** → **Extract**.
 3. Open the extracted folder (keep going in until you see a lot of files) and
@@ -37,6 +40,7 @@ That one double-click:
 - makes the desktop icon;
 - **asks for the recipe-reading key** — paste it if you have one (step 3),
   or press Enter to do it later;
+- **asks for the publishing key** — same, see step 3b;
 - runs the installation check.
 
 Nothing is ever deleted. It names the folder it copied from so you can remove
@@ -96,14 +100,26 @@ If you'd rather trade some accuracy for a lower bill, set
 `RECIPE_MODEL=claude-sonnet-5` in `.env` — good on clean printed cards,
 less reliable on difficult handwriting.
 
+## 3b. Switch on website publishing
+
+This is what lets the PC put the website online and share recipes with the
+other computer. Without it everything still works; recipes just stay on this
+computer.
+
+It needs its own key, made on GitHub. The steps are in `PUBLISHING.md` under
+*The publishing key, on each computer* — two minutes. Then double-click
+**`Set up website publishing.bat`** and paste it (or paste it when
+`Set up on this PC` asks). The key is checked against GitHub before it is
+saved, and lives in `.env` next to the other one.
+
 ## 4. Check everything
 
 ```
 npm run doctor
 ```
 
-Every line should have a tick, except "Recipe reading configured" if you
-skipped step 3.
+Every line should have a tick, except "Recipe reading configured" and
+"Website publishing configured" if you skipped steps 3 and 3b.
 
 ## 5. Put the icon on her desktop
 
@@ -150,12 +166,21 @@ launchers appear without their `.bat`:
 | **Check for problems** | `Check for problems.bat` |
 | **Install desktop icon** | `Install desktop icon.bat` |
 | **Set up recipe reading** | `Set up recipe reading.bat` |
+| **Set up website publishing** | `Set up website publishing.bat` |
 | **start-studio** | `start-studio.bat` |
 
 To see the endings: in File Explorer, **View** -> **Show** -> **File name
 extensions** (on Windows 10, **View** -> tick **File name extensions**).
 
 The Mac and Linux equivalents live in the `mac-linux` folder, out of the way.
+
+## On a Mac
+
+Same thing, in Terminal: install Node.js from <https://nodejs.org>, unzip the
+download, then in the unzipped folder run `mac-linux/set-up.sh`. It installs
+to `~/Documents/emma-cooking-blogg`, brings in any earlier copy, and asks for
+the two keys. From then on `mac-linux/start-studio.sh` opens the Studio and
+`mac-linux/update.sh` updates it. There is no desktop icon on the Mac.
 
 ## Updating later
 
@@ -191,13 +216,12 @@ It refuses to run while the Studio is open, and a failed or interrupted
 download leaves the installation untouched.
 
 The Studio checks for a new version once when it starts and, if there is one,
-shows a quiet line in the sidebar. The check is a single conditional request
-that transfers nothing when there is no update, and it is silent when there is
-no internet.
+shows a quiet line in the sidebar. The check is a single small request that
+asks GitHub for the newest commit and compares it with the one installed; it
+is silent when there is no internet.
 
-**After the pull request is merged**, change `updateSource.branch` in
-`package.json` from the feature branch to `main`. The updater reads that from
-the copy it installs, so the switch reaches every PC on its next update.
+The repository is private, so both the check and the download use the
+publishing key from `.env` (step 3b). Without one, `Update` explains and stops.
 
 ## Commands
 
@@ -210,6 +234,8 @@ the copy it installs, so the switch reaches every PC on its next update.
 | `npm run icon` | Rebuild the desktop icon from `assets/icon.svg` |
 | `npm run update` | Fetch and install the latest version (or double-click `Update.bat`) |
 | `npm run key` | Set up or replace the recipe-reading key (or double-click `Set up recipe reading.bat`) |
+| `npm run publish-setup` | Set up or replace the publishing key (or double-click `Set up website publishing.bat`) |
+| `npm test` | Run the automated tests |
 
 ## Changing the dropdown lists
 

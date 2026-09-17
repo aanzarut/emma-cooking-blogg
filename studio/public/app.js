@@ -154,9 +154,47 @@ function renderRail() {
             el('br'),
             'Close the Studio and double-click Update.')
         : null,
+      railPublishNotes(),
       state.boot?.ai?.available ? 'Recipe reading is on.' : 'Recipe reading is off.',
       el('br'),
-      'Everything is saved on this computer.'));
+      state.boot?.publish?.configured ? 'Saved on this computer and online.' : 'Everything is saved on this computer.'));
+}
+
+/* What the sidebar says about the website, when publishing is set up. */
+function railPublishNotes() {
+  const pub = state.boot?.publish;
+  if (!pub?.configured) return null;
+  const notes = [];
+  const pull = pub.startupPull || {};
+  if (pull.downloaded) {
+    notes.push(el('div', { class: 'rail-update' },
+      el('strong', {}, `${pull.downloaded} file${pull.downloaded === 1 ? '' : 's'} came in from the other computer.`)));
+  }
+  if (pull.pending) {
+    notes.push(el('div', { class: 'rail-update' },
+      `${pull.pending} change${pull.pending === 1 ? '' : 's'} here not yet online.`, el('br'),
+      el('a', { href: '#', onclick: (e) => { e.preventDefault(); go('publish'); } }, 'Put the website online')));
+  }
+  if (pub.tokenDaysLeft !== null && pub.tokenDaysLeft !== undefined && pub.tokenDaysLeft <= 30) {
+    notes.push(el('div', { class: 'rail-update' },
+      el('strong', {}, pub.tokenDaysLeft < 0 ? 'The publishing key has expired.' : `The publishing key runs out in ${pub.tokenDaysLeft} day${pub.tokenDaysLeft === 1 ? '' : 's'}.`),
+      el('br'),
+      'Double-click "Set up website publishing" for a new one.'));
+  }
+  if (pub.lastPublishAt) {
+    notes.push(el('div', {}, `Last put online: ${niceWhen(pub.lastPublishAt)}`));
+  }
+  return notes;
+}
+
+function niceWhen(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (sameDay) return `today at ${time}`;
+  return `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} at ${time}`;
 }
 
 function topbar(title, subtitle, ...actions) {
@@ -1330,12 +1368,85 @@ function viewPublish() {
         el('div', { style: { height: '14px' } }),
         logBox)),
 
-    el('div', { class: 'panel' },
-      el('header', {}, el('h2', {}, 'Step 2 — Put it online')),
+    publishOnlinePanel());
+}
+
+/* Step 2: send the library to the recipe store on GitHub, from which the
+   website rebuilds itself. Also brings in what the other computer did. */
+function publishOnlinePanel() {
+  const pub = state.boot?.publish || {};
+  const header = el('header', {}, el('h2', {}, 'Step 2 — Put it online'));
+
+  if (!pub.configured) {
+    return el('div', { class: 'panel' }, header,
       el('div', { class: 'body' },
-        el('p', {}, 'The finished website is the ', el('code', {}, 'dist'), ' folder. To publish it, open a terminal in the project folder and run:'),
-        el('pre', { class: 'log' }, 'git add -A\ngit commit -m "New recipes"\ngit push'),
-        el('p', { class: 'hint' }, 'See PUBLISHING.md in the project folder for how to connect it to a web address the first time.'))));
+        el('div', { class: 'note warn' },
+          'Putting the website online is not set up on this computer yet. Ask whoever set this up to double-click ',
+          el('strong', {}, '“Set up website publishing”'), ' in the Studio folder — it takes two minutes.'),
+        el('p', { class: 'hint' }, 'See PUBLISHING.md in the project folder for the whole picture.')));
+  }
+
+  const logBox = el('pre', { class: 'log' }, pub.lastSummary?.length ? pub.lastSummary.join('\n') : 'Not put online yet in this session.');
+  const status = el('div');
+  const button = el('button', { class: 'btn primary', onclick: () => publish() }, '\u{1F680} Put the website online');
+
+  const showOutcome = (s) => {
+    logBox.textContent = (s.log || []).join('\n') || 'Working…';
+    if (s.running) return false;
+    button.disabled = false;
+    if (s.error) {
+      mount(status, el('div', { class: 'note bad' }, s.error));
+      return true;
+    }
+    const r = s.result || {};
+    const bits = [el('div', { class: 'note good' }, ...(r.summary || ['Done.']).map((line) => el('div', {}, line)))];
+    const aside = r.setAside || [];
+    if (aside.length) {
+      bits.push(el('div', { style: { height: '10px' } }));
+      bits.push(el('div', { class: 'note warn' },
+        el('div', {}, el('strong', {}, 'Nothing was lost.'), ' These copies were set aside inside the library folder, in case they are wanted:'),
+        ...aside.map((a) => el('div', {}, el('code', {}, a.to)))));
+    }
+    mount(status, ...bits);
+    return true;
+  };
+
+  const watch = () => {
+    button.disabled = true;
+    mount(status, el('div', { class: 'note info' }, el('span', { class: 'spin' }), ' Talking to GitHub… this can take a few minutes the first time.'));
+    const poll = setInterval(async () => {
+      try {
+        const s = await api('/api/sync/status');
+        if (showOutcome(s)) { clearInterval(poll); await refreshBoot(); renderRail(); }
+      } catch (err) { clearInterval(poll); button.disabled = false; mount(status, el('div', { class: 'note bad' }, err.message)); }
+    }, 900);
+  };
+
+  const publish = async () => {
+    try {
+      await api('/api/sync', { method: 'POST' });
+      watch();
+    } catch (err) {
+      mount(status, el('div', { class: 'note bad' }, err.message));
+    }
+  };
+
+  if (pub.running) watch();
+
+  const pull = pub.startupPull || {};
+  return el('div', { class: 'panel' }, header,
+    el('div', { class: 'body' },
+      el('p', {}, 'This sends your new and changed recipes to the recipe store on GitHub, brings back anything done on the other computer, and the website rebuilds itself within a few minutes. Finish the recipe you are working on first.'),
+      pull.pending ? el('div', { class: 'note info' }, `${pull.pending} change${pull.pending === 1 ? '' : 's'} on this computer ${pull.pending === 1 ? 'is' : 'are'} waiting to go online.`) : null,
+      pull.pending ? el('div', { style: { height: '10px' } }) : null,
+      pull.error ? el('div', { class: 'note warn' }, 'Could not check GitHub when the Studio started: ', pull.error) : null,
+      pull.error ? el('div', { style: { height: '10px' } }) : null,
+      button,
+      el('div', { style: { height: '14px' } }),
+      status,
+      el('div', { style: { height: '14px' } }),
+      logBox,
+      el('p', { class: 'hint' }, pub.lastPublishAt ? `Last put online ${niceWhen(pub.lastPublishAt)}. ` : '', `Recipe store: github.com/${pub.repo}.`)));
 }
 
 /* ------------------------------------------------------------------- help */
@@ -1361,7 +1472,7 @@ function viewHelp() {
         : 'Type the ingredients and method in. (Automatic reading is switched off because no key is set up — see SETUP.md.)'),
       el('p', {}, 'Add her story, tags and categories, pick a main photo, then set the status to Ready.')),
     step(5, 'Publish',
-      el('p', {}, 'Go to Publish and press Build. Look at the preview, and when it looks right, push it online.')));
+      el('p', {}, 'Go to Publish and press Build. Look at the preview, and when it looks right, press "Put the website online". That also brings in anything added on the other computer.')));
 }
 
 /* ------------------------------------------------------------------ render */

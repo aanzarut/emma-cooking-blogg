@@ -15,7 +15,9 @@
     "icon": "node scripts/make-icon.js",
     "update": "node scripts/update.js",
     "key": "node scripts/setup-key.js",
-    "gather": "node scripts/update.js --gather"
+    "gather": "node scripts/update.js --gather",
+    "publish-setup": "node scripts/setup-publish.js",
+    "test": "node --test \"test/*.test.js\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
@@ -29,6 +31,6 @@
   },
   "updateSource": {
     "repo": "aanzarut/emma-cooking-blogg",
-    "branch": "claude/cooking-blog-asset-system-a4jxrn"
+    "branch": "main"
   }
 }

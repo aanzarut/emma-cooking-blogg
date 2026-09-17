@@ -5,37 +5,10 @@
    genuinely awkward — Notepad appends .txt and Explorer hides extensions —
    and because a mistyped key otherwise fails silently weeks later. */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { ROOT } from '../studio/lib/paths.js';
+import { ENV_FILE } from '../studio/lib/env.js';
+import { say, mask, ask, clearScreen, currentEnvValue, writeEnvValue, finish } from './wizard.js';
 
-const ENV_FILE = path.join(ROOT, '.env');
-const say = (line = '') => console.log(line);
-
-/** Show enough of a key to recognise it, never enough to leak it. */
-const mask = (key) => `${key.slice(0, 11)}...${key.slice(-4)}  (${key.length} characters)`;
-
-function readEnv() {
-  if (!fs.existsSync(ENV_FILE)) return [];
-  return fs.readFileSync(ENV_FILE, 'utf8').split(/\r?\n/);
-}
-
-/** Replace the key line if there is one, otherwise add it; keep everything else. */
-function writeKey(key) {
-  const lines = readEnv();
-  const at = lines.findIndex((line) => /^\s*ANTHROPIC_API_KEY\s*=/.test(line));
-  if (at >= 0) {
-    lines[at] = `ANTHROPIC_API_KEY=${key}`;
-  } else {
-    if (lines.length && lines[lines.length - 1].trim() !== '') lines.push('');
-    lines.push('# Lets the Studio read photographed recipe cards.');
-    lines.push(`ANTHROPIC_API_KEY=${key}`);
-  }
-  fs.writeFileSync(ENV_FILE, `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`, {
-    encoding: 'utf8',
-    mode: 0o600,        // owner-only, where the operating system honours it
-  });
-}
+const writeKey = (key) => writeEnvValue('ANTHROPIC_API_KEY', key, '# Lets the Studio read photographed recipe cards.');
 
 /**
  * Prove the key works before saving it, so a typo surfaces now rather than
@@ -56,41 +29,6 @@ async function keyWorks(key) {
   });
 }
 
-/* A plain line reader rather than readline.
-   Two readline prompts in a row lose whatever the first has already buffered,
-   which silently ate the pasted key; and readline's terminal handling differs
-   between a console window and a pipe, which makes it hard to be sure of. This
-   behaves the same either way. */
-let buffer = '';
-const ready = [];      // lines that arrived before anything asked for them
-const waiting = [];    // askers with no line yet
-
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => {
-  buffer += chunk;
-  let cut;
-  while ((cut = buffer.indexOf('\n')) >= 0) {
-    const line = buffer.slice(0, cut).replace(/\r$/, '');
-    buffer = buffer.slice(cut + 1);
-    // Hold onto anything nobody is waiting for yet: a paste can deliver every
-    // line in one chunk, well before the second question is asked.
-    if (waiting.length) waiting.shift()(line);
-    else ready.push(line);
-  }
-});
-process.stdin.on('end', () => { while (waiting.length) waiting.shift()(''); });
-
-function ask(question) {
-  process.stdout.write(question);
-  if (ready.length) return Promise.resolve(ready.shift().trim());
-  return new Promise((resolve) => waiting.push((line) => resolve(line.trim())));
-}
-
-/** Wipe the window so a pasted key is not left sitting on screen. */
-function clearScreen() {
-  if (process.stdout.isTTY) process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
-}
-
 // Run from first-time setup, where skipping is a normal choice, not a failure.
 const OPTIONAL = process.argv.includes('--optional');
 
@@ -108,9 +46,8 @@ async function main() {
   }
   say();
 
-  const existing = readEnv().find((line) => /^\s*ANTHROPIC_API_KEY\s*=\s*\S/.test(line));
-  if (existing) {
-    const current = existing.split('=').slice(1).join('=').trim();
+  const current = currentEnvValue('ANTHROPIC_API_KEY');
+  if (current) {
     say(`  There is already a key set up:  ${mask(current)}`);
     const replace = await ask('  Replace it? (y/N) ');
     say();
@@ -206,4 +143,4 @@ main()
     say();
     process.exitCode = 1;
   })
-  .finally(() => process.stdin.pause());
+  .finally(finish);

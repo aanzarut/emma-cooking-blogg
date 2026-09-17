@@ -12,6 +12,7 @@ library/.recovered/
 library/inbox/.discarded/
 library/inbox/.heic-originals/
 .update-state.json
+.sync-state.json
 
 # Operating system clutter
 .DS_Store
