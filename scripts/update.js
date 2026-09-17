@@ -16,6 +16,9 @@ import net from 'node:net';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ROOT, pathBudget } from '../studio/lib/paths.js';
+import { githubToken } from '../studio/lib/env.js';
+import { gh, repoSource, GitHubError, explain } from '../studio/lib/github.js';
+import { copyFileKeepingTime, recoveredFolder } from '../studio/lib/recover.js';
 
 /* ------------------------------------------------------------------ shape */
 
@@ -86,6 +89,10 @@ function knownFolder(name, fallback) {
 function documentsDir() {
   if (process.env.RECIPE_STUDIO_DOCUMENTS) return process.env.RECIPE_STUDIO_DOCUMENTS;
   if (process.platform === 'win32') return knownFolder('MyDocuments', path.join(os.homedir(), 'Documents'));
+  if (process.platform === 'darwin') {
+    const docs = path.join(os.homedir(), 'Documents');
+    if (fs.existsSync(docs)) return docs;
+  }
   return os.homedir();
 }
 
@@ -172,42 +179,64 @@ function studioIsRunning(projectRoot) {
 
 /* -------------------------------------------------------------- download */
 
-function updateSource(projectRoot) {
-  const pkg = readJson(path.join(projectRoot, 'package.json'), {});
-  const source = pkg.updateSource || {};
-  return {
-    repo: source.repo || 'aanzarut/emma-cooking-blogg',
-    branch: source.branch || 'main',
-  };
+const updateSource = (projectRoot) => repoSource(projectRoot);
+
+function describeGitHubFailure(err, { repo, branch }) {
+  if (err instanceof GitHubError && err.status === 404 && !githubToken()) {
+    return 'The recipe store on GitHub is private, and this computer has no publishing key yet. '
+         + 'Double-click "Set up website publishing" first, then run this again. Nothing was changed.';
+  }
+  if (err instanceof GitHubError && err.status === 404) {
+    return `GitHub has no branch called "${branch}" in ${repo}, or the publishing key cannot see it. Nothing was changed.`;
+  }
+  if (err instanceof GitHubError || err?.code === 'offline') return `${explain(err, { repo })} Nothing was changed.`;
+  return `Could not reach GitHub (${err.message}). Check the internet connection and try again.`;
 }
 
 /**
- * Conditional download. When nothing has changed GitHub answers 304 with an
- * empty body, so the routine check costs no bandwidth at all.
+ * Ask GitHub for the newest commit on the branch and, unless it is the one
+ * already installed (or headOnly is set), download it. The check is one
+ * small request; the recipe store is private, so both carry the publishing
+ * key from .env when there is one.
  */
-export async function fetchRelease({ repo, branch }, knownTag) {
+export async function fetchRelease({ repo, branch }, knownCommit, { headOnly = false } = {}) {
   // RECIPE_STUDIO_UPDATE_URL lets the test suite serve a known release locally
-  // instead of reaching GitHub.
-  const url = process.env.RECIPE_STUDIO_UPDATE_URL
-    || `https://github.com/${repo}/archive/refs/heads/${branch}.tar.gz`;
-  const headers = { 'user-agent': 'recipe-studio-updater' };
-  if (knownTag) headers['if-none-match'] = knownTag;
+  // instead of reaching GitHub. Its ETag stands in for the commit.
+  if (process.env.RECIPE_STUDIO_UPDATE_URL) {
+    let response;
+    try {
+      response = await fetch(process.env.RECIPE_STUDIO_UPDATE_URL, { method: headOnly ? 'HEAD' : 'GET', headers: { 'user-agent': 'recipe-studio-updater' } });
+    } catch (err) {
+      stop(`Could not reach GitHub (${err.message}). Check the internet connection and try again.`);
+    }
+    if (!response.ok) stop(`GitHub answered ${response.status}. Nothing was changed.`);
+    const commit = response.headers.get('etag') || 'local';
+    if (headOnly || (knownCommit && commit === knownCommit)) return { changed: commit !== knownCommit, commit };
+    const body = Buffer.from(await response.arrayBuffer());
+    if (body.length < 1024) stop('The download was too small to be real. Nothing was changed.');
+    return { changed: true, body, commit };
+  }
 
-  let response;
+  const token = githubToken();
+  let head;
   try {
-    response = await fetch(url, { headers });
+    head = await gh(token, 'GET', `/repos/${repo}/commits/${branch}`, { accept: 'application/vnd.github.sha', timeoutMs: 15000 });
   } catch (err) {
-    stop(`Could not reach GitHub (${err.message}). Check the internet connection and try again.`);
+    stop(describeGitHubFailure(err, { repo, branch }));
   }
-  if (response.status === 304) return { changed: false };
-  if (response.status === 404) {
-    stop(`GitHub has no branch called "${branch}" in ${repo}. Nothing was changed.`);
-  }
-  if (!response.ok) stop(`GitHub answered ${response.status}. Nothing was changed.`);
+  head = String(head).trim();
+  if (headOnly || (knownCommit && head === knownCommit)) return { changed: head !== knownCommit, commit: head };
 
-  const body = Buffer.from(await response.arrayBuffer());
+  let body;
+  try {
+    // Answers with a redirect to a pre-signed download address, which fetch
+    // follows on its own (dropping the key on the way, as it should).
+    body = await gh(token, 'GET', `/repos/${repo}/tarball/${head}`, { raw: true, timeoutMs: 600000 });
+  } catch (err) {
+    stop(describeGitHubFailure(err, { repo, branch }));
+  }
   if (body.length < 1024) stop('The download was too small to be real. Nothing was changed.');
-  return { changed: true, body, etag: response.headers.get('etag') || '' };
+  return { changed: true, body, commit: head };
 }
 
 /** Unpack with tar, which Windows 10 has shipped since 2018, else PowerShell. */
@@ -310,7 +339,7 @@ function installFresh(source, target, dataFrom, notes) {
     fs.rmSync(target, { recursive: true, force: true });
     fs.mkdirSync(target, { recursive: true });
     for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-      if (['node_modules', 'dist', '.git', STATE_FILE].includes(entry.name)) continue;
+      if (['node_modules', 'dist', '.git', STATE_FILE, '.sync-state.json'].includes(entry.name)) continue;
       const from = path.join(source, entry.name);
       const to = path.join(target, entry.name);
       if (entry.isDirectory()) copyTree(from, to); else fs.copyFileSync(from, to);
@@ -336,13 +365,6 @@ const LIBRARY_WORK = ['recipes', 'inbox', 'backgrounds'];
 const sameBytes = (a, b) =>
   fs.statSync(a).size === fs.statSync(b).size && fs.readFileSync(a).equals(fs.readFileSync(b));
 
-function copyFileKeepingTime(from, to) {
-  fs.mkdirSync(path.dirname(to), { recursive: true });
-  fs.copyFileSync(from, to);
-  const { atime, mtime } = fs.statSync(from);
-  fs.utimesSync(to, atime, mtime);
-}
-
 /**
  * Bring one library's recipes and photos into another without losing a
  * single file from either. A file only in the source is copied. A file in
@@ -354,8 +376,7 @@ function copyFileKeepingTime(from, to) {
  * place or in .recovered, or the whole run stops.
  */
 function mergeLibrary(fromRoot, toRoot, label) {
-  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '.');
-  const recovered = path.join(toRoot, 'library', '.recovered', `${stamp} from ${label}`);
+  const recovered = recoveredFolder(`from ${label}`, new Date(), path.join(toRoot, 'library'));
   const tally = { copied: 0, same: 0, replaced: 0, kept: 0, bytes: 0, recovered };
   const check = [];
 
@@ -467,7 +488,7 @@ async function main() {
   const state = readJson(statePath, {});
 
   step(`Checking ${source.repo} (${source.branch}) for a new version...`);
-  const release = await fetchRelease(source, force ? null : state.etag);
+  const release = await fetchRelease(source, force ? null : state.commit);
 
   if (!release.changed) {
     detail('Already up to date. Nothing to do.');
@@ -518,7 +539,7 @@ async function main() {
       detail('Program files replaced. Recipes, photos and settings untouched.');
     }
 
-    await finishInstall(target, release.etag, source.branch, notes, movedFrom);
+    await finishInstall(target, release.commit, source, notes, movedFrom);
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
   }
@@ -573,12 +594,7 @@ async function firstTimeSetup(here, source) {
     step('No earlier copy with recipes or photos was found, so this is a clean start.');
   }
 
-  // A downloaded copy carries no history, so the first update check must not
-  // report the version just installed as new: record what it is.
-  let etag = '';
-  try { etag = (await fetchRelease(source, null)).etag || ''; } catch { /* offline is fine */ }
-
-  await finishInstall(target, etag, source.branch, notes, movedFrom, { offerKey: true });
+  await finishInstall(target, '', source, notes, movedFrom, { offerKey: true });
 }
 
 function recoveredNote(tally) {
@@ -637,7 +653,7 @@ function runWithHeartbeat(command, args, { cwd, everyMs = 20000 } = {}) {
 }
 
 /** Everything that happens once the files are in place. */
-async function finishInstall(target, etag, branch, notes, movedFrom, { offerKey = false } = {}) {
+async function finishInstall(target, commit, source, notes, movedFrom, { offerKey = false } = {}) {
   step('Installing the parts it needs (this can take a few minutes)...');
   detail('It may look as though nothing is happening. It is. Leave this window open.');
   const installed = process.env.RECIPE_STUDIO_SKIP_INSTALL
@@ -655,23 +671,36 @@ async function finishInstall(target, etag, branch, notes, movedFrom, { offerKey 
     ], { cwd: target, stdio: 'inherit' });
   }
 
+  // First-time setup: the person wants card reading and publishing from the
+  // start, so ask for both keys here rather than sending them to two more
+  // launchers. Runs after npm install (the first needs the SDK) and before
+  // the health check (so the check reflects the answers). Skipping either is
+  // fine and is not a failure.
+  if (offerKey) {
+    // the test suite has no SDK in a bare install; still exercise the prompts
+    const env = process.env.RECIPE_STUDIO_SKIP_INSTALL
+      ? { ...process.env, RECIPE_STUDIO_SKIP_KEY_CHECK: '1', RECIPE_STUDIO_SKIP_TOKEN_CHECK: '1' }
+      : process.env;
+    spawnSync(process.execPath, [path.join(target, 'scripts', 'setup-key.js'), '--optional'],
+      { cwd: target, stdio: 'inherit', env });
+    spawnSync(process.execPath, [path.join(target, 'scripts', 'setup-publish.js'), '--optional'],
+      { cwd: target, stdio: 'inherit', env });
+  }
+
+  // A downloaded copy carries no history, so the first update check must not
+  // report the version just installed as new: record what it is. Done after
+  // the key offers, because a private recipe store answers only with the key.
+  if (!commit) {
+    try {
+      const fresh = readJson(path.join(target, 'package.json'), {});
+      const where = { repo: fresh.updateSource?.repo || source.repo, branch: fresh.updateSource?.branch || source.branch };
+      commit = (await fetchRelease(where, null, { headOnly: true })).commit || '';
+    } catch { /* offline, or no key yet: the Studio records it on its first check */ }
+  }
   fs.writeFileSync(
     path.join(target, STATE_FILE),
-    JSON.stringify({ etag, updatedAt: new Date().toISOString(), branch }, null, 2)
+    JSON.stringify({ commit, updatedAt: new Date().toISOString(), branch: source.branch }, null, 2)
   );
-
-  // First-time setup: the person wants card reading from the start, so ask
-  // for the key here rather than sending them to a second launcher. Runs
-  // after npm install (it needs the SDK) and before the health check (so the
-  // check reflects the answer). Skipping is fine and is not a failure.
-  if (offerKey && !process.env.RECIPE_STUDIO_SKIP_INSTALL) {
-    spawnSync(process.execPath, [path.join(target, 'scripts', 'setup-key.js'), '--optional'],
-      { cwd: target, stdio: 'inherit' });
-  } else if (offerKey && process.env.RECIPE_STUDIO_SKIP_INSTALL) {
-    // the test suite has no SDK in a bare install; still exercise the prompt
-    spawnSync(process.execPath, [path.join(target, 'scripts', 'setup-key.js'), '--optional'],
-      { cwd: target, stdio: 'inherit', env: { ...process.env, RECIPE_STUDIO_SKIP_KEY_CHECK: '1' } });
-  }
 
   let health = { status: 0 };
   if (!process.env.RECIPE_STUDIO_SKIP_INSTALL) {
@@ -734,14 +763,15 @@ export function otherCopiesWithRecipes(projectRoot = ROOT) {
 export async function checkForUpdate(projectRoot = ROOT) {
   const statePath = path.join(projectRoot, STATE_FILE);
   const state = readJson(statePath, {});
-  const release = await fetchRelease(updateSource(projectRoot), state.etag);
+  const source = updateSource(projectRoot);
+  const release = await fetchRelease(source, state.commit, { headOnly: true });
 
   // With nothing recorded yet, this install came straight from a download and
-  // is current by definition — remember the tag rather than crying wolf.
-  if (!state.etag) {
-    if (release.etag) {
+  // is current by definition — remember the commit rather than crying wolf.
+  if (!state.commit) {
+    if (release.commit) {
       fs.writeFileSync(statePath, JSON.stringify(
-        { etag: release.etag, updatedAt: new Date().toISOString() }, null, 2));
+        { commit: release.commit, updatedAt: new Date().toISOString(), branch: source.branch }, null, 2));
     }
     return { available: false, checkedAt: new Date().toISOString() };
   }

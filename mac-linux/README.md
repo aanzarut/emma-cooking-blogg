@@ -3,9 +3,11 @@
 The Windows launchers live in the folder above, as `.bat` files. These are the
 same things for anything that is not Windows:
 
-    ./start-studio.sh       open Recipe Studio
-    ./update.sh             fetch and install the latest version
-    ./find-my-recipes.sh    bring recipes from every other copy into this one
+    ./set-up.sh              first-time setup, from the unzipped download
+    ./start-studio.sh        open Recipe Studio
+    ./update.sh              fetch and install the latest version
+    ./find-my-recipes.sh     bring recipes from every other copy into this one
+    ./set-up-publishing.sh   paste the key that lets this Mac put the website online
 
 They are kept down here so the main folder shows only the files a Windows user
 needs. Windows hides the `.bat` ending, so up there `Update.bat` appears simply

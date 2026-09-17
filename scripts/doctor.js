@@ -59,6 +59,31 @@ const hasKey = hasEnv && /^\s*ANTHROPIC_API_KEY\s*=\s*\S/m.test(fs.readFileSync(
 check('Recipe reading configured', hasKey,
   'optional — copy .env.example to .env and add a key to switch it on');
 
+// The key that lets this computer put the website online. Optional, but
+// when it is there it is checked for real, because an expired key is the
+// one thing here that quietly stops working a year later.
+try {
+  const { githubToken } = await import('../studio/lib/env.js');
+  const { repoSource, daysUntilExpiry, explain } = await import('../studio/lib/github.js');
+  const { checkAccess } = await import('../studio/lib/sync.js');
+  const token = githubToken();
+  if (!token) {
+    check('Website publishing configured', false, 'optional — double-click "Set up website publishing" to switch it on');
+  } else {
+    try {
+      const access = await checkAccess(token);
+      const days = daysUntilExpiry(access.expiresAt);
+      const expiry = days === null ? '' : days < 0 ? ', key EXPIRED' : days <= 30 ? `, key runs out in ${days} days — make a new one soon` : `, key valid for ${days} more days`;
+      check('Website publishing configured', true, '', `github.com/${repoSource().repo}${expiry}`);
+    } catch (err) {
+      if (err?.code === 'offline') check('Website publishing configured', true, '', 'could not check — no internet right now');
+      else check('Website publishing configured', false, explain(err));
+    }
+  }
+} catch (err) {
+  check('Website publishing configured', false, `could not check: ${err.message}`);
+}
+
 // The cut-out model behind the photo editor's Background tool. Absent is
 // not a fault — it is fetched the first time a background is chosen — so
 // this line is informational either way.
@@ -97,7 +122,8 @@ for (const r of results) {
 }
 console.log(`\n  ${recipes} recipe${recipes === 1 ? '' : 's'} in the library.\n`);
 
-const blocking = results.filter((r) => !r.ok && r.label !== 'Recipe reading configured');
+const OPTIONAL = new Set(['Recipe reading configured', 'Website publishing configured']);
+const blocking = results.filter((r) => !r.ok && !OPTIONAL.has(r.label));
 if (blocking.length) {
   console.log('  Something needs fixing before the Studio will run.\n');
   process.exit(1);

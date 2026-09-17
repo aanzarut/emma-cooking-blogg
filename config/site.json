@@ -1,9 +1,9 @@
 {
-  "_comment": "Change these and rebuild to update the website's wording and address.",
+  "_comment": "Change these and put the website online to update its wording. url: the address it lives at (used for the sitemap) - set it to the domain once there is one.",
   "title": "Emma's Kitchen",
   "tagline": "Recipes collected, cooked and written down.",
   "description": "A growing collection of family recipes, cookbook favourites and kitchen notes.",
   "footer": "Emma's Kitchen — recipes kept by hand.",
-  "url": "https://example.github.io/emma-cooking-blogg",
+  "url": "https://emmas-kitchen.pages.dev",
   "customDomain": ""
 }

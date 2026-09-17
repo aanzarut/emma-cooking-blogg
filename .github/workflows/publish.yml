@@ -1,27 +1,39 @@
-# Builds the website and publishes it to GitHub Pages.
+# Builds the website from the recipe library and puts it on Cloudflare Pages.
 #
-# This workflow does nothing until you switch it on — see PUBLISHING.md.
-# To enable automatic publishing, uncomment the `push:` block below and set
-# Settings → Pages → Source to "GitHub Actions".
+# Runs on every push to main that touches the recipes, the config or the site
+# code — which is what "Put the website online" in the Studio produces. It
+# can also be started by hand from the Actions tab (workflow_dispatch).
+#
+# Needs two repository secrets, set once (see PUBLISHING.md):
+#   CLOUDFLARE_API_TOKEN   a token with "Cloudflare Pages: Edit"
+#   CLOUDFLARE_ACCOUNT_ID  from the Cloudflare dashboard's overview page
+# and a Cloudflare Pages project whose name matches --project-name below.
 
 name: Publish website
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'library/**'
+      - 'config/**'
+      - 'site/**'
+      - 'studio/lib/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.npmrc'
+      - '.github/workflows/publish.yml'
   workflow_dispatch:
-  # push:
-  #   branches: [main]
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: publish
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,18 +48,9 @@ jobs:
       - name: Build the website
         run: npm run build
 
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
+      - name: Put it on Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
         with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=emmas-kitchen --branch=main

@@ -15,6 +15,9 @@ import * as inbox from './lib/inbox.js';
 import * as cutout from './lib/cutout.js';
 import * as backgrounds from './lib/backgrounds.js';
 import * as ai from './lib/transcribe.js';
+import * as sync from './lib/sync.js';
+import { daysUntilExpiry, tokenExpiry, repoSource } from './lib/github.js';
+import { loadEnvFile } from './lib/env.js';
 import { checkForUpdate } from '../scripts/update.js';
 
 const PORT = Number(process.env.PORT || 4321);
@@ -26,18 +29,6 @@ ensureLibrary();
 const router = createRouter();
 
 /* ------------------------------------------------------------------ setup */
-
-/** Read a plain KEY=value .env file, if the user made one. */
-function loadEnvFile() {
-  const file = path.join(ROOT, '.env');
-  if (!fs.existsSync(file)) return;
-  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (!match) continue;
-    const value = match[2].replace(/^["']|["']$/g, '');
-    if (!process.env[match[1]]) process.env[match[1]] = value;
-  }
-}
 
 function taxonomy() {
   return JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, 'taxonomy.json'), 'utf8'));
@@ -74,6 +65,7 @@ router.get('/api/bootstrap', async (_req, res) => {
     ai: { available: ai.isAvailable(), model: ai.DEFAULT_MODEL },
     cutout: cutout.status(),
     update: updateStatus,
+    publish: publishStatus(),
     uploadUrl: `${lanAddress()}/upload`,
     previewUrl: `http://localhost:${PREVIEW_PORT}/`,
     statuses: store.STATUSES,
@@ -451,14 +443,53 @@ router.get('/files/*', async (_req, res, { params, query }) => {
 
 let lastBuild = { running: false, log: '', ok: null, at: '' };
 
+/* "Put the website online": a sync with GitHub, run in the background and
+   polled, exactly like the build above. */
+let lastSync = { running: false, mode: '', log: [], result: null, error: '', at: '' };
+let startupPull = { done: false, downloaded: 0, setAside: 0, pending: 0, error: '' };
+
+function publishStatus() {
+  const configured = sync.isConfigured();
+  const state = sync.lastState();
+  const { repo, branch } = repoSource();
+  return {
+    configured,
+    repo,
+    branch,
+    lastPublishAt: state.lastPublishAt,
+    lastSyncAt: state.lastSyncAt,
+    lastSummary: state.lastSummary,
+    tokenExpiresAt: tokenExpiry(),
+    tokenDaysLeft: daysUntilExpiry(),
+    startupPull,
+    running: lastSync.running,
+  };
+}
+
+function startSync(mode) {
+  lastSync = { running: true, mode, log: [], result: null, error: '', at: new Date().toISOString() };
+  const current = lastSync;
+  return sync.sync({ mode, onLog: (line) => current.log.push(line) })
+    .then((result) => { current.result = result; return result; })
+    .catch((err) => { current.error = err.message; throw err; })
+    .finally(() => { current.running = false; });
+}
+
+/* Once at startup: bring in what the other computer sent, touching nothing
+   edited here. Quiet on any failure — the button reports properly. */
+function pullQuietly() {
+  if (!sync.isConfigured() || lastSync.running) return;
+  startSync('pull')
+    .then((r) => { startupPull = { done: true, downloaded: r.downloaded, setAside: r.setAside.length, pending: r.pending, error: '' }; })
+    .catch((err) => { startupPull = { done: true, downloaded: 0, setAside: 0, pending: 0, error: err.message }; });
+}
+
 /* Asked once at startup, never on a schedule. Anything that goes wrong here —
    no internet, GitHub down, a slow line — leaves the Studio working exactly as
    it did, with the notice simply absent. */
 let updateStatus = { available: false, checkedAt: '' };
 
 function lookForUpdateQuietly() {
-  const timeout = setTimeout(() => {}, 0);
-  clearTimeout(timeout);
   Promise.race([
     checkForUpdate(ROOT),
     new Promise((_, reject) => setTimeout(() => reject(new Error('timed out')), 5000)),
@@ -479,6 +510,17 @@ router.post('/api/publish', async (_req, res) => {
     lastBuild.running = false;
     lastBuild.ok = code === 0;
   });
+  sendJson(res, 202, { started: true });
+});
+
+router.get('/api/sync/status', async (_req, res) => sendJson(res, 200, lastSync));
+
+router.post('/api/sync', async (_req, res) => {
+  if (!sync.isConfigured()) {
+    return fail(res, 'Putting the website online is not set up on this computer yet. Double-click "Set up website publishing" in the Studio folder.');
+  }
+  if (lastSync.running) return sendJson(res, 200, lastSync);
+  startSync('full').catch(() => { /* reported through /api/sync/status */ });
   sendJson(res, 202, { started: true });
 });
 
@@ -548,6 +590,9 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(ai.isAvailable()
     ? `    Recipe reading:    on (${ai.DEFAULT_MODEL})`
     : '    Recipe reading:    off (no ANTHROPIC_API_KEY in .env)');
+  console.log(sync.isConfigured()
+    ? `    Website publish:   on (github.com/${repoSource().repo})`
+    : '    Website publish:   off (no GITHUB_TOKEN in .env)');
   console.log('');
   const launchedFromIcon = process.argv.includes('--open') || process.env.OPEN_BROWSER === '1';
   console.log(launchedFromIcon
@@ -557,4 +602,5 @@ server.listen(PORT, '0.0.0.0', () => {
 
   if (launchedFromIcon) openInBrowser(`http://localhost:${PORT}`);
   lookForUpdateQuietly();
+  pullQuietly();
 });
