@@ -1,0 +1,9 @@
+{
+  "_comment": "Change these and rebuild to update the website's wording and address.",
+  "title": "Emma's Kitchen",
+  "tagline": "Recipes collected, cooked and written down.",
+  "description": "A growing collection of family recipes, cookbook favourites and kitchen notes.",
+  "footer": "Emma's Kitchen — recipes kept by hand.",
+  "url": "https://example.github.io/emma-cooking-blogg",
+  "customDomain": ""
+}

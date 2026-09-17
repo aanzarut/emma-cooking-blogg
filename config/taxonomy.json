@@ -1,0 +1,35 @@
+{
+  "_comment": "Edit this file to change the dropdown choices in the Studio. Restart the Studio after editing.",
+  "foodTypes": [
+    "Appetizer", "Soup", "Salad", "Bread", "Main course", "Side dish",
+    "Pasta", "Rice & grains", "Seafood", "Poultry", "Beef", "Pork",
+    "Vegetarian", "Vegan", "Breakfast", "Sandwich", "Sauce & dressing",
+    "Preserve & pickle", "Dessert", "Cake", "Cookie", "Pastry",
+    "Candy", "Drink", "Cocktail", "Snack"
+  ],
+  "cuisines": [
+    "American", "Italian", "French", "Spanish", "Portuguese", "Greek",
+    "Middle Eastern", "Lebanese", "Turkish", "Moroccan", "North African",
+    "Ethiopian", "West African", "Indian", "Thai", "Vietnamese", "Chinese",
+    "Japanese", "Korean", "Filipino", "Malaysian", "Mexican", "Caribbean",
+    "Brazilian", "Peruvian", "Argentinian", "German", "Polish", "Russian",
+    "Scandinavian", "British", "Irish", "Jewish", "Cajun & Creole",
+    "Southern US", "Fusion"
+  ],
+  "courses": ["Breakfast", "Brunch", "Lunch", "Dinner", "Dessert", "Snack", "Party", "Holiday"],
+  "difficulties": ["Easy", "Medium", "Involved"],
+  "units": [
+    "", "tsp", "tbsp", "cup", "cups", "pint", "quart", "gallon",
+    "fl oz", "oz", "lb", "g", "kg", "ml", "l",
+    "pinch", "dash", "clove", "cloves", "slice", "slices",
+    "can", "cans", "package", "bunch", "head", "stalk", "sprig",
+    "piece", "pieces", "large", "medium", "small", "to taste"
+  ],
+  "suggestedTags": [
+    "family favorite", "holiday", "thanksgiving", "christmas", "passover",
+    "easter", "summer", "winter", "make-ahead", "freezer-friendly",
+    "one-pot", "weeknight", "slow-cooker", "grill", "no-bake",
+    "gluten-free", "dairy-free", "nut-free", "kid-friendly", "crowd-pleaser",
+    "grandma's", "heirloom", "needs-testing"
+  ]
+}

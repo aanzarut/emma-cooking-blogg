@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Send photos to Recipe Studio</title>
+  <style>
+    :root { --accent: #c2643c; --ink: #1d2733; --soft: #5b6b7c; --line: #ddd8d1; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 28px 20px 60px;
+      font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--ink); background: #f6f4f0;
+      max-width: 560px; margin-inline: auto;
+    }
+    h1 { font-size: 24px; margin: 0 0 6px; }
+    p.lede { color: var(--soft); margin: 0 0 26px; }
+    label.drop {
+      display: block; text-align: center; padding: 40px 20px;
+      border: 2px dashed var(--line); border-radius: 16px; background: #fff;
+      cursor: pointer; margin-bottom: 18px;
+    }
+    label.drop .big { font-size: 42px; }
+    label.drop b { display: block; font-size: 18px; margin-top: 10px; }
+    label.drop span { color: var(--soft); font-size: 15px; }
+    input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    button {
+      width: 100%; padding: 16px; font: inherit; font-weight: 600;
+      background: var(--accent); color: #fff; border: 0; border-radius: 12px; cursor: pointer;
+    }
+    button[disabled] { opacity: .5; }
+    .list { margin: 18px 0; display: grid; gap: 8px; }
+    .item { display: flex; gap: 10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 15px; }
+    .item .ok { color: #2f7a55; font-weight: 700; }
+    .item .no { color: #a83232; font-weight: 700; }
+    .item .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar { height: 8px; background: #e6e1da; border-radius: 99px; overflow: hidden; margin: 14px 0; }
+    .bar > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+    .done { background: #e6f2eb; border: 1px solid #c8e2d3; color: #2f7a55; padding: 14px; border-radius: 12px; text-align: center; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Send photos to the Studio</h1>
+  <p class="lede">Pick recipe cards or finished-dish photos. They land in the Inbox on the computer, where you sort them.</p>
+
+  <form id="form">
+    <label class="drop">
+      <span class="big">&#128248;</span>
+      <b>Choose photos</b>
+      <span>You can pick as many as you like</span>
+      <input id="picker" type="file" accept="image/*,.pdf,.heic,.heif" multiple />
+    </label>
+    <div class="list" id="list"></div>
+    <div class="bar" id="barwrap" hidden><i id="bar"></i></div>
+    <button id="send" type="submit" disabled>Send</button>
+  </form>
+
+  <script>
+    const picker = document.getElementById('picker');
+    const list = document.getElementById('list');
+    const send = document.getElementById('send');
+    const bar = document.getElementById('bar');
+    const barwrap = document.getElementById('barwrap');
+    let files = [];
+
+    picker.addEventListener('change', () => {
+      files = [...picker.files];
+      list.innerHTML = files
+        .map((f) => `<div class="item"><span class="nm"></span><span>${(f.size / 1048576).toFixed(1)} MB</span></div>`)
+        .join('');
+      [...list.querySelectorAll('.nm')].forEach((el, i) => { el.textContent = files[i].name; });
+      send.disabled = files.length === 0;
+      send.textContent = files.length ? `Send ${files.length} photo${files.length > 1 ? 's' : ''}` : 'Send';
+    });
+
+    document.getElementById('form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!files.length) return;
+      const data = new FormData();
+      files.forEach((f) => data.append('photos', f, f.name));
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/inbox/upload');
+      barwrap.hidden = false;
+      send.disabled = true;
+      send.textContent = 'Sending…';
+      xhr.upload.addEventListener('progress', (ev) => {
+        if (ev.lengthComputable) bar.style.width = `${(ev.loaded / ev.total) * 100}%`;
+      });
+      xhr.addEventListener('load', () => {
+        let result = {};
+        try { result = JSON.parse(xhr.responseText); } catch {}
+        const saved = (result.saved || []).length;
+        const rejected = result.rejected || [];
+        document.getElementById('form').innerHTML =
+          `<div class="done">Sent ${saved} photo${saved === 1 ? '' : 's'}.<br>Open the Inbox on the computer to sort them.</div>` +
+          (rejected.length ? `<div class="list">${rejected.map((r) => `<div class="item"><span class="no">&#10007;</span><span class="nm"></span></div>`).join('')}</div>` : '') +
+          `<p style="text-align:center"><a href="/upload">Send more</a></p>`;
+        [...document.querySelectorAll('.list .nm')].forEach((el, i) => {
+          if (rejected[i]) el.textContent = `${rejected[i].name} — ${rejected[i].reason}`;
+        });
+      });
+      xhr.addEventListener('error', () => {
+        send.disabled = false;
+        send.textContent = 'Sending failed — try again';
+      });
+      xhr.send(data);
+    });
+  </script>
+</body>
+</html>
